@@ -1,0 +1,43 @@
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, JSON, Numeric, String
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+
+from app.db.base import Base
+
+
+class Booking(Base):
+    __tablename__ = "bookings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    contract_id = Column(UUID(as_uuid=True), ForeignKey("client_contracts.id"), nullable=True)
+    payment_id = Column(UUID(as_uuid=True), nullable=True)
+    currency = Column(String(10), nullable=True)
+    partners = Column(JSON, default=list)
+    total_amount = Column(Numeric(14, 2), nullable=True)
+    payment_type = Column(String(50), nullable=True)
+    cost_at_booking = Column(Numeric(14, 2), nullable=True)
+    cost_post_event = Column(Numeric(14, 2), nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True)
+    service_start_at = Column(DateTime(timezone=True), nullable=True)
+    service_end_at = Column(DateTime(timezone=True), nullable=True)
+    status = Column(
+        Enum("confirmed", "completed", "cancelled", "pending", name="booking_status"),
+        default="confirmed",
+        nullable=False,
+    )
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    client = relationship("User", foreign_keys=[client_id])
+    agent = relationship("User", foreign_keys=[agent_id])
+    contract = relationship("ClientContract")
+    reviews = relationship("Review", back_populates="booking")
