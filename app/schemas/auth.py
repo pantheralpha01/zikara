@@ -1,5 +1,9 @@
-from typing import Optional
+from typing import List, Optional
+
 from pydantic import BaseModel, EmailStr
+
+from app.models.profile import ComputerExperience, EducationLevel, EnglishLevel, IdType
+from app.models.user import Gender
 
 
 class ClientSignupRequest(BaseModel):
@@ -7,6 +11,8 @@ class ClientSignupRequest(BaseModel):
     email: EmailStr
     password: str
     phone: str
+    gender: Optional[Gender] = None
+    profilePicUrl: Optional[str] = None
 
 
 class AgentApplyRequest(BaseModel):
@@ -15,7 +21,20 @@ class AgentApplyRequest(BaseModel):
     password: str
     phone: str
     idNumber: str
-    idType: str
+    idType: IdType
+    gender: Optional[Gender] = None
+    profilePicUrl: Optional[str] = None
+    age: Optional[int] = None
+    town: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    educationLevel: Optional[EducationLevel] = None
+    englishLevel: Optional[EnglishLevel] = None
+    computerExperience: Optional[ComputerExperience] = None
+    haveAComputer: Optional[bool] = None
+    accessToInternet: Optional[bool] = None
+    internetSpeed: Optional[str] = None
+    descriptionOfSelf: Optional[str] = None
 
 
 class PartnerSignupRequest(BaseModel):
@@ -25,10 +44,13 @@ class PartnerSignupRequest(BaseModel):
     password: str
     phone: str
     idNumber: str
-    idType: str
+    idType: IdType
     businessName: str
-    website: str
-    description: str
+    website: Optional[str] = None
+    description: Optional[str] = None
+    gender: Optional[Gender] = None
+    profilePicUrl: Optional[str] = None
+    servicesProvided: Optional[List[str]] = None
 
 
 class LoginRequest(BaseModel):

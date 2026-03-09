@@ -29,6 +29,8 @@ def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
         email=body.email,
         password_hash=hash_password(body.password),
         phone=body.phone,
+        gender=body.gender,
+        profile_pic_url=body.profilePicUrl,
         role="client",
         status="active",
     )
@@ -86,12 +88,29 @@ def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
         email=body.email,
         password_hash=hash_password(body.password),
         phone=body.phone,
+        gender=body.gender,
+        profile_pic_url=body.profilePicUrl,
         role="agent",
         status="pending",
     )
     db.add(user)
     db.flush()
-    db.add(AgentProfile(user_id=user.id, id_number=body.idNumber, id_type=body.idType))
+    db.add(AgentProfile(
+        user_id=user.id,
+        id_number=body.idNumber,
+        id_type=body.idType,
+        age=body.age,
+        town=body.town,
+        city=body.city,
+        country=body.country,
+        education_level=body.educationLevel,
+        english_level=body.englishLevel,
+        computer_experience=body.computerExperience,
+        have_a_computer=body.haveAComputer if body.haveAComputer is not None else False,
+        access_to_internet=body.accessToInternet if body.accessToInternet is not None else False,
+        internet_speed=body.internetSpeed,
+        description_of_self=body.descriptionOfSelf,
+    ))
     db.commit()
     db.refresh(user)
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
@@ -107,6 +126,8 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
         email=body.email,
         password_hash=hash_password(body.password),
         phone=body.phone,
+        gender=body.gender,
+        profile_pic_url=body.profilePicUrl,
         role="partner",
         status="pending",
     )
@@ -121,6 +142,7 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
         business_name=body.businessName,
         website=body.website,
         description=body.description,
+        services_provided=body.servicesProvided,
     )
     db.add(profile)
     db.commit()

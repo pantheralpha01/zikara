@@ -1,3 +1,4 @@
+import enum
 import uuid
 from datetime import datetime, timezone
 
@@ -8,6 +9,12 @@ from sqlalchemy.orm import relationship
 from app.db.base import Base
 
 
+class Gender(str, enum.Enum):
+    MALE = "MALE"
+    FEMALE = "FEMALE"
+    PREFER_NOT_TO_SAY = "PREFER_NOT_TO_SAY"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -16,6 +23,8 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)
     phone = Column(String(50), nullable=True)
+    gender = Column(Enum(Gender, name="gender_type", native_enum=False), nullable=True)
+    profile_pic_url = Column(String(500), nullable=True)
     role = Column(Enum("admin", "agent", "partner", "client", name="user_role"), nullable=False)
     status = Column(
         Enum("active", "pending", "suspended", "rejected", name="user_status"),

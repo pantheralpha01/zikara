@@ -20,6 +20,10 @@ def update_me(body: UserUpdateRequest, db: Session = Depends(get_db), current_us
         current_user.full_name = body.full_name
     if body.phone is not None:
         current_user.phone = body.phone
+    if body.gender is not None:
+        current_user.gender = body.gender
+    if body.profile_pic_url is not None:
+        current_user.profile_pic_url = body.profile_pic_url
     db.commit()
     db.refresh(current_user)
     return current_user
