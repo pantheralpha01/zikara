@@ -12,3 +12,4 @@ from app.models.booking import Booking  # noqa: F401
 from app.models.payment import Payment, Wallet  # noqa: F401
 from app.models.refund_dispute import Refund, Dispute  # noqa: F401
 from app.models.review import Review  # noqa: F401
+from app.models.otp import OtpCode  # noqa: F401

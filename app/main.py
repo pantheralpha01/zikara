@@ -18,6 +18,7 @@ from app.routers import (
     payments,
     refunds_disputes,
     reviews,
+    otp,
 )
 
 # Create tables on startup (use Alembic migrations in production instead)
@@ -49,6 +50,7 @@ app.include_router(payments.wallet_router)
 app.include_router(refunds_disputes.refunds_router)
 app.include_router(refunds_disputes.disputes_router)
 app.include_router(reviews.router)
+app.include_router(otp.router)
 
 
 @app.get("/", tags=["Health"])
