@@ -34,7 +34,7 @@ def create_client_contract(body: ClientContractCreate, db: Session = Depends(get
         service_title=body.serviceTitle,
         agent_id=body.agentId,
         currency=body.currency,
-        partners=[p.model_dump() for p in body.partners],
+        partners=[p.model_dump(mode='json') for p in body.partners],
         total_amount=body.totalAmount,
         payment_type=body.paymentType,
         cost_at_booking=body.costAtBooking,

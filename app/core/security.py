@@ -1,14 +1,18 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+import os
+
 import bcrypt
 from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.core.config import settings
 
+_BCRYPT_ROUNDS = int(os.environ.get("BCRYPT_ROUNDS", "12"))
+
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:

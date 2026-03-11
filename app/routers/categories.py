@@ -21,7 +21,7 @@ def create_category(body: CategoryCreate, db: Session = Depends(get_db), _: User
         name=body.name,
         slug=body.slug,
         is_active=body.isActive,
-        attributes_schema=[a.model_dump() for a in body.attributesSchema],
+        attributes_schema=[a.model_dump(mode='json') for a in body.attributesSchema],
     )
     db.add(cat)
     db.commit()

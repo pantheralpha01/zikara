@@ -24,7 +24,7 @@ def create_quote(body: QuoteCreate, db: Session = Depends(get_db), _: User = Dep
         agent_id=body.agentId,
         currency=body.currency,
         multiple_partners_enabled=str(body.multiplepartnersEnabled).lower(),
-        partners=[p.model_dump() for p in body.partners],
+        partners=[p.model_dump(mode='json') for p in body.partners],
         total_amount=body.totalAmount,
         payment_type=body.paymentType,
         cost_at_booking=body.costAtBooking,
