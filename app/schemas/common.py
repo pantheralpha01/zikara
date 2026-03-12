@@ -29,6 +29,15 @@ class UserUpdateRequest(BaseModel):
     profile_pic_url: Optional[str] = None
 
 
+class ManagerCreateRequest(BaseModel):
+    fullName: str
+    email: EmailStr
+    password: str
+    phone: str
+    gender: Optional[Gender] = None
+    profilePicUrl: Optional[str] = None
+
+
 class PartnerProfileOut(BaseModel):
     id: UUID
     user_id: UUID

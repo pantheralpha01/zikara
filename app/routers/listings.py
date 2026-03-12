@@ -87,7 +87,7 @@ def list_listings(
 
 
 @router.post("/{id}/approve", status_code=200)
-def approve_listing(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def approve_listing(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
     listing = db.query(Listing).filter(Listing.id == id).first()
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")

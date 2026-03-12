@@ -142,11 +142,8 @@ def update_dispute(id: UUID, body: DisputeUpdate, db: Session = Depends(get_db),
     dispute = db.query(Dispute).filter(Dispute.id == id).first()
     if not dispute:
         raise HTTPException(status_code=404, detail="Dispute not found")
-    if current_user.role not in {"admin", "agent"}:
+    if current_user.role not in {"admin", "manager"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    booking = _get_booking_or_404(dispute.booking_id, db)
-    if current_user.role == "agent" and booking.agent_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You are not allowed to update this dispute")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(dispute, field, value)
     db.commit()

@@ -122,8 +122,8 @@ def test_non_admin_cannot_manage_agents_clients(client_http, agent_http, partner
         assert c.get("/clients").status_code == 403
 
 
-def test_non_admin_cannot_approve_listing(agent_http, partner_http, seeded_resources):
-    for c in (agent_http, partner_http):
+def test_non_admin_cannot_approve_listing(agent_http, partner_http, client_http, seeded_resources):
+    for c in (agent_http, partner_http, client_http):
         r = c.post(f"/listings/{seeded_resources['listing_id']}/approve")
         assert r.status_code == 403
 

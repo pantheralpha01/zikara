@@ -176,16 +176,54 @@ class TestAdminMatrix:
         delete = admin_client.delete(f"/categories/{cid}")
         assert delete.status_code == 200
 
+    def test_manager_can_create_service(self, manager_client, admin_client):
+        cat = admin_client.post(
+            "/categories",
+            json={"name": f"Mgr Cat {_uid()}", "slug": f"mgr-cat-{_uid()}"},
+        )
+        assert cat.status_code == 201
+        r = manager_client.post(
+            "/services",
+            json={"categoryId": cat.json()["id"], "name": "Mgr Service", "slug": f"mgr-svc-{_uid()}"},
+        )
+        assert r.status_code == 201
+
+    def test_admin_can_create_and_deactivate_manager(self, admin_client, http):
+        email = f"mgr-created-{_uid()}@test.com"
+        password = "ManagerPass123!"
+
+        create = admin_client.post(
+            "/users/managers",
+            json={"fullName": "Manager Created", "email": email, "password": password, "phone": "0710000000"},
+        )
+        assert create.status_code == 201, create.text
+        manager_id = create.json()["id"]
+
+        login = http.post("/auth/login", json={"email": email, "password": password})
+        assert login.status_code == 200, login.text
+        access = login.json()["accessToken"]
+        headers = {"Authorization": f"Bearer {access}"}
+
+        assert http.get("/users/me", headers=headers).status_code == 200
+
+        deactivate = admin_client.post(f"/users/managers/{manager_id}/deactivate")
+        assert deactivate.status_code == 200, deactivate.text
+
+        # Deactivation invalidates existing sessions by clearing refresh token.
+        assert http.get("/users/me", headers=headers).status_code == 401
+
 
 class TestRoleGates:
-    def test_clients_and_agents_lists_are_admin_only(self, client_http, agent_http, partner_http):
+    def test_clients_and_agents_lists_are_admin_only(self, client_http, agent_http, partner_http, manager_client):
         assert client_http.get("/clients").status_code == 403
         assert agent_http.get("/clients").status_code == 403
         assert partner_http.get("/clients").status_code == 403
+        assert manager_client.get("/clients").status_code == 200
 
         assert client_http.get("/agents").status_code == 403
         assert agent_http.get("/agents").status_code == 403
         assert partner_http.get("/agents").status_code == 403
+        assert manager_client.get("/agents").status_code == 200
 
     def test_partner_listing_create_requires_own_profile(self, partner_http, catalog_ids, partner_profile_id):
         ok = partner_http.post(
@@ -271,9 +309,17 @@ class TestOwnershipFlows:
         assert admin_client.get(f"/disputes/{dispute_id}").status_code == 200
         assert partner_http.get(f"/disputes/{dispute_id}").status_code == 403
 
+    def test_manager_can_approve_partner_and_listing(self, manager_client, partner_profile_id, partner_listing_id):
+        assert manager_client.post(f"/partners/{partner_profile_id}/approve").status_code == 200
+        assert manager_client.post(f"/listings/{partner_listing_id}/approve").status_code == 200
+
+    def test_agent_cannot_update_dispute(self, agent_http, dispute_id):
+        r = agent_http.patch(f"/disputes/{dispute_id}", json={"status": "under_review"})
+        assert r.status_code == 403
+
 
 class TestContractAndReviewMatrix:
-    def test_contract_role_matrix(self, client_http, agent_http, partner_http, admin_client, partner_profile_id, agent_user_id):
+    def test_contract_role_matrix(self, client_http, agent_http, partner_http, admin_client, manager_client, partner_profile_id, agent_user_id):
         now = datetime.now(timezone.utc).isoformat()
 
         c_client = client_http.post(
@@ -282,13 +328,13 @@ class TestContractAndReviewMatrix:
         )
         assert c_client.status_code == 201
 
-        c_agent = agent_http.post(
+        c_agent = manager_client.post(
             "/contracts/agent",
             json={"agentID": agent_user_id, "referenceID": f"A-{_uid()}", "fileurl": "https://x/a.pdf", "signedAt": now},
         )
         assert c_agent.status_code == 201
 
-        c_partner = partner_http.post(
+        c_partner = manager_client.post(
             "/contracts/partner",
             json={
                 "partnerID": partner_profile_id,
@@ -312,6 +358,10 @@ class TestContractAndReviewMatrix:
         assert partner_http.post(
             "/contracts/agent",
             json={"agentID": agent_user_id, "referenceID": f"BAD-{_uid()}", "fileurl": "https://x/bad.pdf", "signedAt": now},
+        ).status_code == 403
+        assert agent_http.post(
+            "/contracts/agent",
+            json={"agentID": agent_user_id, "referenceID": f"BAD2-{_uid()}", "fileurl": "https://x/bad2.pdf", "signedAt": now},
         ).status_code == 403
         assert admin_client.get("/contracts/clients").status_code == 200
 

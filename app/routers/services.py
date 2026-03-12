@@ -14,7 +14,7 @@ router = APIRouter(prefix="/services", tags=["Services"])
 
 
 @router.post("", status_code=201)
-def create_service(body: ServiceCreate, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def create_service(body: ServiceCreate, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
     if db.query(Service).filter(Service.slug == body.slug).first():
         raise HTTPException(status_code=409, detail="Slug already exists")
     svc = Service(

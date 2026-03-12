@@ -71,7 +71,7 @@ def update_partner(
 
 
 @router.post("/{id}/approve", status_code=200)
-def approve_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def approve_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
     partner = _get_partner_or_404(id, db)
     partner.user.status = "active"
     db.commit()

@@ -136,7 +136,7 @@ def delete_client_contract(id: UUID, db: Session = Depends(get_db), current_user
 
 @router.post("/partner", status_code=201)
 def create_partner_contract(body: PartnerContractCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role not in {"admin", "partner"}:
+    if current_user.role not in {"admin", "manager", "partner"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     partner_id = body.partnerID
     if current_user.role == "partner":
@@ -216,13 +216,9 @@ def delete_partner_contract(id: UUID, db: Session = Depends(get_db), current_use
 
 @router.post("/agent", status_code=201)
 def create_agent_contract(body: AgentContractCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    if current_user.role not in {"admin", "agent"}:
+    if current_user.role not in {"admin", "manager"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     agent_id = body.agentID
-    if current_user.role == "agent":
-        if body.agentID != current_user.id:
-            raise HTTPException(status_code=403, detail="You can only create contracts for yourself")
-        agent_id = current_user.id
 
     contract = AgentContract(
         agent_id=agent_id,

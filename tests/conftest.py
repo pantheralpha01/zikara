@@ -9,6 +9,7 @@ All test data is cleaned up via a module-scoped teardown.
 import uuid
 import pytest
 import httpx
+from sqlalchemy import text
 
 # Import all models so SQLAlchemy can resolve all relationships (e.g. Wallet)
 import app.db.init_models  # noqa: F401
@@ -67,6 +68,39 @@ def admin_token(db):
 
 
 @pytest.fixture(scope="session")
+def manager_token(db):
+    """Create a manager user directly in DB and return JWT access token."""
+    from app.core.security import create_access_token, create_refresh_token
+
+    # Ensure enum value exists even if local DB migration hasn't been applied yet.
+    db.execute(text("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'manager'"))
+    db.commit()
+
+    email = f"manager_{_uid()}@test.com"
+    manager = User(
+        full_name="Test Manager",
+        email=email,
+        password_hash=hash_password("ManagerPass123!"),
+        phone="0000000001",
+        role="manager",
+        status="active",
+    )
+    db.add(manager)
+    db.commit()
+    db.refresh(manager)
+
+    refresh = create_refresh_token(str(manager.id), "manager")
+    manager.refresh_token = refresh
+    db.commit()
+
+    token = create_access_token(str(manager.id), "manager")
+    yield token
+
+    db.delete(manager)
+    db.commit()
+
+
+@pytest.fixture(scope="session")
 def client_credentials():
     return {
         "email": f"client_{_uid()}@test.com",
@@ -107,6 +141,13 @@ def http():
 @pytest.fixture(scope="session")
 def admin_client(admin_token):
     headers = {"Authorization": f"Bearer {admin_token}"}
+    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+        yield c
+
+
+@pytest.fixture(scope="session")
+def manager_client(manager_token):
+    headers = {"Authorization": f"Bearer {manager_token}"}
     with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
         yield c
 

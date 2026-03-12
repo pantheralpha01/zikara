@@ -25,7 +25,7 @@ class User(Base):
     phone = Column(String(50), nullable=True)
     gender = Column(Enum(Gender, name="gender_type", native_enum=False), nullable=True)
     profile_pic_url = Column(String(500), nullable=True)
-    role = Column(Enum("admin", "agent", "partner", "client", name="user_role"), nullable=False)
+    role = Column(Enum("admin", "manager", "agent", "partner", "client", name="user_role"), nullable=False)
     status = Column(
         Enum("active", "pending", "suspended", "rejected", name="user_status"),
         default="active",
