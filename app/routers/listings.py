@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_role
 from app.db.session import get_db
 from app.models.listing import Listing
+from app.models.profile import PartnerProfile
 from app.models.user import User
 from app.schemas.common import ListingCreate, ListingOut
 
@@ -17,8 +18,14 @@ router = APIRouter(prefix="/listings", tags=["Listings"])
 def create_listing(
     body: ListingCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("partner")),
+    current_user: User = Depends(require_role("partner")),
 ):
+    partner = db.query(PartnerProfile).filter(PartnerProfile.user_id == current_user.id).first()
+    if not partner:
+        raise HTTPException(status_code=403, detail="Partner profile not found")
+    if body.partnerId != partner.id:
+        raise HTTPException(status_code=403, detail="You can only create listings for your own partner profile")
+
     listing = Listing(
         partner_id=body.partnerId,
         category_id=body.categoryId,
@@ -50,9 +57,17 @@ def list_listings(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = db.query(Listing)
+    if current_user.role == "partner":
+        partner = db.query(PartnerProfile).filter(PartnerProfile.user_id == current_user.id).first()
+        if not partner:
+            raise HTTPException(status_code=403, detail="Partner profile not found")
+        q = q.filter(Listing.partner_id == partner.id)
+    elif current_user.role != "admin":
+        q = q.filter(Listing.status == "approved")
+
     if categoryId:
         q = q.filter(Listing.category_id == categoryId)
     if city:
@@ -61,7 +76,7 @@ def list_listings(
         q = q.filter(Listing.price_from >= minPrice)
     if maxPrice is not None:
         q = q.filter(Listing.price_from <= maxPrice)
-    if partnerId:
+    if partnerId and current_user.role == "admin":
         q = q.filter(Listing.partner_id == partnerId)
     if status:
         q = q.filter(Listing.status == status)

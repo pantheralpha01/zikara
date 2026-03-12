@@ -1,9 +1,15 @@
+import random
+import string
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
 from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from app.db.session import get_db
+from app.models.otp import OtpCode
 from app.models.profile import AgentProfile, ClientProfile, PartnerProfile
 from app.models.user import User
 from app.schemas.auth import (
@@ -14,10 +20,21 @@ from app.schemas.auth import (
     PartnerSignupRequest,
     RefreshRequest,
     TokenResponse,
+    OAuthTokenResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
 )
+from app.services.sms import send_otp_sms
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+RESET_OTP_EXPIRY_MINUTES = 30
+
+
+def _generate_otp_code() -> str:
+    return "".join(random.choices(string.digits, k=6))
 
 @router.post("/client/signup", status_code=status.HTTP_201_CREATED)
 def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
@@ -55,6 +72,21 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     user.refresh_token = refresh
     db.commit()
     return TokenResponse(accessToken=access, refreshToken=refresh)
+
+
+@router.post("/token", response_model=OAuthTokenResponse, summary="OAuth2 token endpoint for Swagger")
+def oauth_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == form_data.username, User.is_deleted == False).first()
+    if not user or not user.password_hash or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if user.status == "suspended":
+        raise HTTPException(status_code=403, detail="Account suspended")
+
+    access = create_access_token(str(user.id), user.role)
+    refresh = create_refresh_token(str(user.id), user.role)
+    user.refresh_token = refresh
+    db.commit()
+    return OAuthTokenResponse(access_token=access, token_type="bearer")
 
 
 @router.post("/refresh", response_model=AccessTokenResponse)
@@ -148,3 +180,52 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=200)
+def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.phone == body.phone, User.is_deleted == False).first()
+
+    # Do not leak whether a phone exists; return same message either way.
+    if user:
+        code = _generate_otp_code()
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_OTP_EXPIRY_MINUTES)
+        otp = OtpCode(phone=body.phone, code=code, expires_at=expires_at)
+        db.add(otp)
+        db.commit()
+        sms_ok = send_otp_sms(body.phone, code)
+        if not sms_ok:
+            raise HTTPException(status_code=502, detail="Failed to send OTP. Please try again.")
+
+    return ForgotPasswordResponse(
+        message="If the phone number exists, a password reset OTP has been sent."
+    )
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse, status_code=200)
+def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.phone == body.phone, User.is_deleted == False).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User with this phone number not found")
+
+    now = datetime.now(timezone.utc)
+    otp = (
+        db.query(OtpCode)
+        .filter(
+            OtpCode.phone == body.phone,
+            OtpCode.code == body.otp,
+            OtpCode.used == False,
+            OtpCode.expires_at > now,
+        )
+        .order_by(OtpCode.created_at.desc())
+        .first()
+    )
+    if not otp:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    user.password_hash = hash_password(body.newPassword)
+    user.refresh_token = None
+    otp.used = True
+    db.commit()
+
+    return ResetPasswordResponse(message="Password reset successful. Please login again.")

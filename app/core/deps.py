@@ -1,39 +1,27 @@
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
+from fastapi.security import OAuth2PasswordBearer
 from app.core.security import decode_token_with_error
 from app.db.session import get_db
 from sqlalchemy.orm import Session
 from app.models.user import User
 
-bearer_scheme = HTTPBearer(auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
 
 
 def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    token: Annotated[str | None, Depends(oauth2_scheme)],
     db: Session = Depends(get_db),
 ) -> User:
-    if credentials is None:
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Authorization header. Use: Authorization: Bearer <accessToken>",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid auth scheme. Use Bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = credentials.credentials.strip()
-    # Swagger's Authorize dialog can accidentally receive "Bearer <token>",
-    # while HTTPBearer already adds the scheme. Normalize this case.
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
+    token = token.strip()
 
     payload, token_error = decode_token_with_error(token)
     if token_error == "token_expired":

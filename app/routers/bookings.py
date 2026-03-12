@@ -14,7 +14,14 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
 @router.post("", status_code=201)
-def create_booking(body: BookingCreate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role == "client" and body.clientId != current_user.id:
+        raise HTTPException(status_code=403, detail="Clients can only create their own bookings")
+    if current_user.role == "agent" and body.agentId != current_user.id:
+        raise HTTPException(status_code=403, detail="Agents can only create bookings assigned to themselves")
+    if current_user.role == "partner":
+        raise HTTPException(status_code=403, detail="Partners cannot create bookings")
+
     booking = Booking(
         client_id=body.clientId,
         agent_id=body.agentId,
@@ -38,8 +45,15 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), _: User =
 
 
 @router.get("/calendar", status_code=200)
-def booking_calendar(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    bookings = db.query(Booking.service_start_at, Booking.service_end_at, Booking.id, Booking.status).all()
+def booking_calendar(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    q = db.query(Booking.service_start_at, Booking.service_end_at, Booking.id, Booking.status)
+    if current_user.role == "client":
+        q = q.filter(Booking.client_id == current_user.id)
+    elif current_user.role == "agent":
+        q = q.filter(Booking.agent_id == current_user.id)
+    elif current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    bookings = q.all()
     return [{"id": str(b.id), "start": b.service_start_at, "end": b.service_end_at, "status": b.status} for b in bookings]
 
 
@@ -52,9 +66,16 @@ def list_bookings(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = db.query(Booking)
+    if current_user.role == "client":
+        q = q.filter(Booking.client_id == current_user.id)
+    elif current_user.role == "agent":
+        q = q.filter(Booking.agent_id == current_user.id)
+    elif current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+
     if status:
         q = q.filter(Booking.status == status)
     if agentId:
@@ -65,18 +86,26 @@ def list_bookings(
 
 
 @router.get("/{id}", status_code=200)
-def get_booking(id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if current_user.role != "admin" and booking.client_id != current_user.id and booking.agent_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not allowed to access this booking")
+
     return BookingOut.model_validate(booking)
 
 
 @router.patch("/{id}", status_code=200)
-def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if current_user.role != "admin" and booking.client_id != current_user.id and booking.agent_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not allowed to update this booking")
+
     for field, value in body.model_dump(exclude_none=True).items():
         if hasattr(booking, field):
             setattr(booking, field, value)
@@ -86,20 +115,28 @@ def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db),
 
 
 @router.delete("/{id}", status_code=200)
-def delete_booking(id: UUID, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def delete_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if current_user.role != "admin" and booking.client_id != current_user.id and booking.agent_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not allowed to delete this booking")
+
     db.delete(booking)
     db.commit()
     return {"message": "Booking deleted"}
 
 
 @router.post("/{id}/complete", status_code=200)
-def complete_booking(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("agent"))):
+def complete_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_role("agent", "admin"))):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    if current_user.role == "agent" and booking.agent_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only complete your assigned bookings")
+
     booking.status = "completed"
     db.commit()
     return {"message": "Booking marked complete"}

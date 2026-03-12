@@ -69,3 +69,26 @@ class RefreshRequest(BaseModel):
 
 class AccessTokenResponse(BaseModel):
     accessToken: str
+
+
+class OAuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class ForgotPasswordRequest(BaseModel):
+    phone: str
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    phone: str
+    otp: str
+    newPassword: str
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str

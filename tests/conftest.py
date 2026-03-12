@@ -12,6 +12,7 @@ import httpx
 
 # Import all models so SQLAlchemy can resolve all relationships (e.g. Wallet)
 import app.db.init_models  # noqa: F401
+from app.core.security import decode_token
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.user import User
@@ -210,3 +211,44 @@ def partner_http(partner_token_data):
     headers = {"Authorization": f"Bearer {partner_token_data['accessToken']}"}
     with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
         yield c
+
+
+@pytest.fixture(scope="session")
+def admin_user_id(admin_token):
+    payload = decode_token(admin_token)
+    return payload["sub"]
+
+
+@pytest.fixture(scope="session")
+def client_user_id(client_http):
+    r = client_http.get("/users/me")
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+@pytest.fixture(scope="session")
+def agent_user_id(agent_http):
+    r = agent_http.get("/users/me")
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+@pytest.fixture(scope="session")
+def partner_user_id(partner_http):
+    r = partner_http.get("/users/me")
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+@pytest.fixture(scope="session")
+def agent_profile_id(db, agent_user_id):
+    profile = db.query(AgentProfile).filter(AgentProfile.user_id == agent_user_id).first()
+    assert profile is not None
+    return str(profile.id)
+
+
+@pytest.fixture(scope="session")
+def partner_profile_id(db, partner_user_id):
+    profile = db.query(PartnerProfile).filter(PartnerProfile.user_id == partner_user_id).first()
+    assert profile is not None
+    return str(profile.id)
