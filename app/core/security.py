@@ -47,3 +47,22 @@ def decode_token_with_error(token: str) -> Tuple[Optional[dict], Optional[str]]:
         return None, "token_expired"
     except JWTError:
         return None, "token_invalid"
+
+
+def create_password_reset_token(user_id: str, password_hash: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+    )
+    # Bake a slice of the current hash into the token so it auto-invalidates after use
+    data = {"sub": user_id, "type": "password_reset", "pwh": password_hash[:8], "exp": expire}
+    return jwt.encode(data, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_password_reset_token(token: str) -> Optional[dict]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "password_reset":
+            return None
+        return payload
+    except JWTError:
+        return None

@@ -76,19 +76,10 @@ class OAuthTokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class ForgotPasswordRequest(BaseModel):
-    phone: str
+class ForgotPasswordEmailRequest(BaseModel):
+    email: EmailStr
 
 
-class ForgotPasswordResponse(BaseModel):
-    message: str
-
-
-class ResetPasswordRequest(BaseModel):
-    phone: str
-    otp: str
+class ResetPasswordByTokenRequest(BaseModel):
+    token: str
     newPassword: str
-
-
-class ResetPasswordResponse(BaseModel):
-    message: str

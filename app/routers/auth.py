@@ -1,5 +1,3 @@
-import random
-import string
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,9 +5,17 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user
-from app.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    create_password_reset_token,
+    decode_password_reset_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
+from app.core.config import settings
 from app.db.session import get_db
-from app.models.otp import OtpCode
 from app.models.profile import AgentProfile, ClientProfile, PartnerProfile
 from app.models.user import User
 from app.schemas.auth import (
@@ -21,20 +27,13 @@ from app.schemas.auth import (
     RefreshRequest,
     TokenResponse,
     OAuthTokenResponse,
-    ForgotPasswordRequest,
-    ForgotPasswordResponse,
-    ResetPasswordRequest,
-    ResetPasswordResponse,
+    ForgotPasswordEmailRequest,
+    ResetPasswordByTokenRequest,
 )
-from app.services.sms import send_otp_sms
+from app.services.email import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-RESET_OTP_EXPIRY_MINUTES = 30
-
-
-def _generate_otp_code() -> str:
-    return "".join(random.choices(string.digits, k=6))
 
 @router.post("/client/signup", status_code=status.HTTP_201_CREATED)
 def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
@@ -182,50 +181,34 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
 
 
-@router.post("/forgot-password", response_model=ForgotPasswordResponse, status_code=200)
-def forgot_password(body: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone == body.phone, User.is_deleted == False).first()
-
-    # Do not leak whether a phone exists; return same message either way.
-    if user:
-        code = _generate_otp_code()
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_OTP_EXPIRY_MINUTES)
-        otp = OtpCode(phone=body.phone, code=code, expires_at=expires_at)
-        db.add(otp)
-        db.commit()
-        sms_ok = send_otp_sms(body.phone, code)
-        if not sms_ok:
-            raise HTTPException(status_code=502, detail="Failed to send OTP. Please try again.")
-
-    return ForgotPasswordResponse(
-        message="If the phone number exists, a password reset OTP has been sent."
-    )
+@router.post("/forgot-password-email", status_code=200)
+async def forgot_password_email(body: ForgotPasswordEmailRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == body.email, User.is_deleted == False).first()
+    # Always return the same message to avoid leaking whether the email is registered
+    if user and user.password_hash:
+        token = create_password_reset_token(str(user.id), user.password_hash)
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+        sent = await send_password_reset_email(user.email, reset_link)
+        if not sent:
+            raise HTTPException(status_code=502, detail="Failed to send reset email. Please try again.")
+    return {"message": "If that email is registered, a password reset link has been sent."}
 
 
-@router.post("/reset-password", response_model=ResetPasswordResponse, status_code=200)
-def reset_password(body: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.phone == body.phone, User.is_deleted == False).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User with this phone number not found")
+@router.post("/reset-password-by-token", status_code=200)
+def reset_password_by_token(body: ResetPasswordByTokenRequest, db: Session = Depends(get_db)):
+    payload = decode_password_reset_token(body.token)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
 
-    now = datetime.now(timezone.utc)
-    otp = (
-        db.query(OtpCode)
-        .filter(
-            OtpCode.phone == body.phone,
-            OtpCode.code == body.otp,
-            OtpCode.used == False,
-            OtpCode.expires_at > now,
-        )
-        .order_by(OtpCode.created_at.desc())
-        .first()
-    )
-    if not otp:
-        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+    user = db.query(User).filter(User.id == payload["sub"], User.is_deleted == False).first()
+    if not user or not user.password_hash:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    # Verify the token hasn't already been used (password hash prefix must still match)
+    if user.password_hash[:8] != payload.get("pwh"):
+        raise HTTPException(status_code=400, detail="Reset link has already been used")
 
     user.password_hash = hash_password(body.newPassword)
-    user.refresh_token = None
-    otp.used = True
+    user.refresh_token = None  # Invalidate all active sessions
     db.commit()
-
-    return ResetPasswordResponse(message="Password reset successful. Please login again.")
+    return {"message": "Password reset successful. Please login again."}
