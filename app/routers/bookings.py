@@ -6,14 +6,23 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_role
 from app.db.session import get_db
-from app.models.booking import Booking
+from app.models.booking import Booking, BookingPartner
 from app.models.user import User
 from app.schemas.bookings import BookingCreate, BookingOut, BookingUpdate
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
-@router.post("", status_code=201)
+@router.post(
+    "",
+    status_code=201,
+    response_model=BookingOut,
+    summary="Create a booking",
+    description=(
+        "Creates a new booking. The booking starts with `payment_status=unpaid` and `amount_paid=0`. "
+        "Use `POST /payments/initiate` to begin payment — partial amounts are supported."
+    ),
+)
 def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if current_user.role == "client" and body.clientId != current_user.id:
         raise HTTPException(status_code=403, detail="Clients can only create their own bookings")
@@ -39,12 +48,20 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_u
         status=body.status,
     )
     db.add(booking)
+    db.flush()  # get booking.id before inserting partners
+    for p in body.partners:
+        db.add(BookingPartner(booking_id=booking.id, partner_id=p.partnerId, amount=p.amount))
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)
 
 
-@router.get("/calendar", status_code=200)
+@router.get(
+    "/calendar",
+    status_code=200,
+    summary="Get booking calendar",
+    description="Returns a lightweight list of bookings (id, start, end, status) for calendar display. Scoped to the current user's role.",
+)
 def booking_calendar(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     q = db.query(Booking.service_start_at, Booking.service_end_at, Booking.id, Booking.status)
     if current_user.role == "client":
@@ -57,7 +74,12 @@ def booking_calendar(db: Session = Depends(get_db), current_user: User = Depends
     return [{"id": str(b.id), "start": b.service_start_at, "end": b.service_end_at, "status": b.status} for b in bookings]
 
 
-@router.get("", status_code=200)
+@router.get(
+    "",
+    status_code=200,
+    summary="List bookings",
+    description="Returns a paginated list of bookings. Includes `amount_paid` and `payment_status` so callers can see partial-payment progress.",
+)
 def list_bookings(
     status: Optional[str] = Query(None),
     agentId: Optional[UUID] = Query(None),
@@ -85,7 +107,13 @@ def list_bookings(
     return {"total": total, "page": page, "items": [BookingOut.model_validate(b) for b in items]}
 
 
-@router.get("/{id}", status_code=200)
+@router.get(
+    "/{id}",
+    status_code=200,
+    response_model=BookingOut,
+    summary="Get a booking",
+    description="Fetch a single booking by ID. Response includes `amount_paid` and `payment_status` (`unpaid`, `partially_paid`, `fully_paid`).",
+)
 def get_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
@@ -97,7 +125,13 @@ def get_booking(id: UUID, db: Session = Depends(get_db), current_user: User = De
     return BookingOut.model_validate(booking)
 
 
-@router.patch("/{id}", status_code=200)
+@router.patch(
+    "/{id}",
+    status_code=200,
+    response_model=BookingOut,
+    summary="Update a booking",
+    description="Update booking status or notes. Payment tracking fields (`amount_paid`, `payment_status`) are managed automatically via the payments endpoints.",
+)
 def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
@@ -114,7 +148,11 @@ def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db),
     return BookingOut.model_validate(booking)
 
 
-@router.delete("/{id}", status_code=200)
+@router.delete(
+    "/{id}",
+    status_code=200,
+    summary="Delete a booking",
+)
 def delete_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:
@@ -128,7 +166,12 @@ def delete_booking(id: UUID, db: Session = Depends(get_db), current_user: User =
     return {"message": "Booking deleted"}
 
 
-@router.post("/{id}/complete", status_code=200)
+@router.post(
+    "/{id}/complete",
+    status_code=200,
+    summary="Mark booking as complete",
+    description="Agents or admins can mark a confirmed booking as completed. Only callable once the booking exists and is assigned to the requesting agent.",
+)
 def complete_booking(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(require_role("agent", "admin"))):
     booking = db.query(Booking).filter(Booking.id == id).first()
     if not booking:

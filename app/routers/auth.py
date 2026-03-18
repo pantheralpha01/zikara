@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.profile import AgentProfile, ClientProfile, PartnerProfile
 from app.models.user import User
+from app.models.worklog import AgentWorkLog
 from app.schemas.auth import (
     AccessTokenResponse,
     AgentApplyRequest,
@@ -69,6 +70,8 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     access = create_access_token(str(user.id), user.role)
     refresh = create_refresh_token(str(user.id), user.role)
     user.refresh_token = refresh
+    if user.role == "agent":
+        db.add(AgentWorkLog(agent_id=user.id, clock_in=datetime.now(timezone.utc)))
     db.commit()
     return TokenResponse(accessToken=access, refreshToken=refresh)
 
@@ -84,6 +87,8 @@ def oauth_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access = create_access_token(str(user.id), user.role)
     refresh = create_refresh_token(str(user.id), user.role)
     user.refresh_token = refresh
+    if user.role == "agent":
+        db.add(AgentWorkLog(agent_id=user.id, clock_in=datetime.now(timezone.utc)))
     db.commit()
     return OAuthTokenResponse(access_token=access, token_type="bearer")
 
@@ -104,6 +109,17 @@ def refresh_token(body: RefreshRequest, db: Session = Depends(get_db)):
 
 @router.post("/logout", status_code=200)
 def logout(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if current_user.role == "agent":
+        log = (
+            db.query(AgentWorkLog)
+            .filter(AgentWorkLog.agent_id == current_user.id, AgentWorkLog.clock_out == None)
+            .order_by(AgentWorkLog.clock_in.desc())
+            .first()
+        )
+        if log:
+            now = datetime.now(timezone.utc)
+            log.clock_out = now
+            log.hours = (now - log.clock_in).total_seconds() / 3600
     current_user.refresh_token = None
     db.commit()
     return {"message": "Logged out"}

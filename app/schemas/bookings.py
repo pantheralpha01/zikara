@@ -39,6 +39,8 @@ class BookingOut(BaseModel):
     currency: Optional[str] = None
     total_amount: Optional[float] = None
     payment_type: Optional[str] = None
+    amount_paid: float = 0
+    payment_status: str = "unpaid"
     status: str
     service_start_at: Optional[datetime] = None
     service_end_at: Optional[datetime] = None
@@ -52,6 +54,10 @@ class PaymentInitiate(BaseModel):
     amount: float
     currency: str
     provider: str
+
+
+class PaymentConfirm(BaseModel):
+    providerReference: Optional[str] = None
 
 
 class PaymentOut(BaseModel):

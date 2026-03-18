@@ -30,6 +30,12 @@ class Booking(Base):
         default="confirmed",
         nullable=False,
     )
+    amount_paid = Column(Numeric(14, 2), default=0, nullable=False)
+    payment_status = Column(
+        Enum("unpaid", "partially_paid", "fully_paid", name="booking_payment_status"),
+        default="unpaid",
+        nullable=False,
+    )
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime(timezone=True),
@@ -41,3 +47,23 @@ class Booking(Base):
     agent = relationship("User", foreign_keys=[agent_id])
     contract = relationship("ClientContract")
     reviews = relationship("Review", back_populates="booking")
+    booking_partners = relationship("BookingPartner", back_populates="booking", cascade="all, delete-orphan")
+
+
+class BookingPartner(Base):
+    """Normalised per-partner allocation for a booking.
+    Created alongside bookings.partners (JSON) for queryable partner stats.
+    """
+    __tablename__ = "booking_partners"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    booking_id = Column(
+        UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    partner_id = Column(
+        UUID(as_uuid=True), ForeignKey("partner_profiles.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount = Column(Numeric(14, 2), default=0, nullable=False)
+
+    booking = relationship("Booking", back_populates="booking_partners")
+    partner = relationship("PartnerProfile")

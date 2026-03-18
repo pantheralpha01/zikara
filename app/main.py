@@ -1,7 +1,10 @@
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
 from app.db.init_models import Base
 from app.routers import (
     auth,
@@ -20,11 +23,28 @@ from app.routers import (
     reviews,
     otp,
 )
+from app.routers import admin
+from app.services.snapshot import take_daily_snapshot
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler = BackgroundScheduler(timezone="UTC")
+    scheduler.add_job(
+        lambda: take_daily_snapshot(SessionLocal()),
+        "cron",
+        hour=0,
+        minute=5,
+    )
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
 
 # Create tables on startup (use Alembic migrations in production instead)
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Zikara Tours API", version="1.0.0")
+app = FastAPI(title="Zikara Tours API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,6 +71,7 @@ app.include_router(refunds_disputes.refunds_router)
 app.include_router(refunds_disputes.disputes_router)
 app.include_router(reviews.router)
 app.include_router(otp.router)
+app.include_router(admin.router)
 
 
 @app.get("/", tags=["Health"])

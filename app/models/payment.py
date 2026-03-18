@@ -42,3 +42,23 @@ class Wallet(Base):
     )
 
     partner = relationship("PartnerProfile", back_populates="wallet")
+    transactions = relationship("WalletTransaction", back_populates="wallet", cascade="all, delete-orphan")
+
+
+class WalletTransaction(Base):
+    """Immutable log of every amount that moved in/out of a wallet."""
+    __tablename__ = "wallet_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    wallet_id = Column(
+        UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    type = Column(
+        Enum("escrow_in", "escrow_release", "payout", "refund_debit", name="wallet_tx_type"),
+        nullable=False,
+    )
+    amount = Column(Numeric(14, 2), nullable=False)
+    reference = Column(String(500), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    wallet = relationship("Wallet", back_populates="transactions")

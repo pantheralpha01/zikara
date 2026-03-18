@@ -1,0 +1,85 @@
+from datetime import datetime
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel
+
+
+class PlatformStatsOut(BaseModel):
+    # Users
+    total_customers: int = 0
+    total_agents: int = 0
+    total_partners: int = 0
+    new_customers_today: int = 0
+    new_agents_today: int = 0
+    new_partners_today: int = 0
+
+    # Bookings
+    bookings_total: int = 0
+    bookings_confirmed: int = 0
+    ongoing_bookings: int = 0
+    bookings_completed: int = 0
+    bookings_cancelled: int = 0
+
+    # Financial
+    gross_booking_value: float = 0
+    total_amount_paid: float = 0
+    refunds_issued: float = 0
+
+    # Escrow
+    escrow_balance: float = 0
+    available_balance: float = 0
+    pending_balance: float = 0
+
+    # Operations
+    disputes_open: int = 0
+    disputes_closed: int = 0
+
+    # Reviews
+    total_reviews: int = 0
+    average_rating: float = 0
+
+
+class AgentStatsOut(BaseModel):
+    agent_id: UUID
+    month: int
+    year: int
+    total_bookings: int = 0
+    ongoing_bookings: int = 0
+    completed_bookings: int = 0
+    cancelled_bookings: int = 0
+    total_refunds: int = 0
+    total_disputes: int = 0
+    review_count: int = 0
+    average_rating: float = 0
+    five_star_rate: float = 0
+    hours_worked: float = 0
+    refund_rate: float = 0
+    dispute_rate: float = 0
+    booking_efficiency: float = 0
+    quality_score: float = 0
+
+
+class PartnerStatsOut(BaseModel):
+    partner_id: UUID
+    month: int
+    year: int
+    bookings_received: int = 0
+    ongoing_bookings: int = 0
+    bookings_completed: int = 0
+    bookings_cancelled: int = 0
+    revenue_generated: float = 0
+    payouts_received: float = 0
+    pending_payouts: float = 0
+    review_count: int = 0
+    average_rating: float = 0
+
+
+class WorkLogOut(BaseModel):
+    id: UUID
+    agent_id: UUID
+    clock_in: datetime
+    clock_out: Optional[datetime] = None
+    hours: float = 0
+
+    model_config = {"from_attributes": True}
