@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_role
 from app.db.session import get_db
 from app.models.booking import Booking, BookingPartner
+from app.models.refund_dispute import Refund
 from app.models.user import User
-from app.schemas.bookings import BookingCreate, BookingOut, BookingUpdate
+from app.schemas.bookings import BookingCreate, BookingOut, BookingReassign, BookingUpdate
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -19,8 +20,9 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
     response_model=BookingOut,
     summary="Create a booking",
     description=(
-        "Creates a new booking. The booking starts with `payment_status=unpaid` and `amount_paid=0`. "
-        "Use `POST /payments/initiate` to begin payment — partial amounts are supported."
+        "Creates a new booking with `status=pending` and `payment_status=unpaid`. "
+        "The booking is automatically moved to `status=confirmed` once a payment is fully confirmed via `POST /payments/{id}/confirm`. "
+        "\n\nFlow: Create booking → `POST /payments/initiate` (with bookingId) → client pays on provider → `POST /payments/{id}/confirm` → booking confirmed."
     ),
 )
 def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -35,7 +37,6 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_u
         client_id=body.clientId,
         agent_id=body.agentId,
         contract_id=body.contractId,
-        payment_id=body.paymentId,
         currency=body.currency,
         partners=[p.model_dump(mode='json') for p in body.partners],
         total_amount=body.totalAmount,
@@ -45,7 +46,7 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_u
         due_date=body.dueDate,
         service_start_at=body.serviceStartAt,
         service_end_at=body.serviceEndAt,
-        status=body.status,
+        status="pending",
     )
     db.add(booking)
     db.flush()  # get booking.id before inserting partners
@@ -95,7 +96,7 @@ def list_bookings(
         q = q.filter(Booking.client_id == current_user.id)
     elif current_user.role == "agent":
         q = q.filter(Booking.agent_id == current_user.id)
-    elif current_user.role != "admin":
+    elif current_user.role not in {"admin", "manager"}:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     if status:
@@ -119,7 +120,7 @@ def get_booking(id: UUID, db: Session = Depends(get_db), current_user: User = De
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if current_user.role != "admin" and booking.client_id != current_user.id and booking.agent_id != current_user.id:
+    if current_user.role not in {"admin", "manager"} and booking.client_id != current_user.id and booking.agent_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not allowed to access this booking")
 
     return BookingOut.model_validate(booking)
@@ -137,12 +138,84 @@ def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db),
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if current_user.role != "admin" and booking.client_id != current_user.id and booking.agent_id != current_user.id:
+    if current_user.role not in {"admin", "manager"} and booking.client_id != current_user.id and booking.agent_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not allowed to update this booking")
 
     for field, value in body.model_dump(exclude_none=True).items():
         if hasattr(booking, field):
             setattr(booking, field, value)
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@router.post(
+    "/{id}/reassign",
+    status_code=200,
+    response_model=BookingOut,
+    summary="Reassign booking to a different agent",
+    description="Reassigns the booking to another agent. Only admin and manager can perform this action — intended for when the original agent is unavailable.",
+)
+def reassign_booking(
+    id: UUID,
+    body: BookingReassign,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    booking = db.query(Booking).filter(Booking.id == id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Cannot reassign a cancelled booking")
+    new_agent = db.query(User).filter(User.id == body.agentId, User.role == "agent", User.is_deleted == False).first()
+    if not new_agent:
+        raise HTTPException(status_code=404, detail="Target agent not found")
+    booking.agent_id = body.agentId
+    db.commit()
+    db.refresh(booking)
+    return BookingOut.model_validate(booking)
+
+
+@router.post(
+    "/{id}/cancel",
+    status_code=200,
+    response_model=BookingOut,
+    summary="Cancel a booking and initiate refund",
+    description=(
+        "Cancels the booking and automatically creates a pending refund for the amount already paid. "
+        "Client may cancel their own booking; agent may cancel their assigned booking; admin and manager can cancel any booking."
+    ),
+)
+def cancel_booking(
+    id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    booking = db.query(Booking).filter(Booking.id == id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    if current_user.role not in {"admin", "manager"}:
+        if booking.client_id != current_user.id and booking.agent_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You are not allowed to cancel this booking")
+
+    if booking.status == "cancelled":
+        raise HTTPException(status_code=400, detail="Booking is already cancelled")
+    if booking.status == "completed":
+        raise HTTPException(status_code=400, detail="Cannot cancel a completed booking")
+
+    booking.status = "cancelled"
+
+    # Auto-initiate refund for the amount paid so far
+    amount_paid = float(booking.amount_paid or 0)
+    if amount_paid > 0:
+        refund = Refund(
+            booking_id=booking.id,
+            amount=amount_paid,
+            reason="Booking cancelled",
+        )
+        db.add(refund)
+
     db.commit()
     db.refresh(booking)
     return BookingOut.model_validate(booking)

@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 from datetime import datetime
 
@@ -15,8 +15,8 @@ class UserOut(BaseModel):
     phone: Optional[str] = None
     gender: Optional[Gender] = None
     profile_pic_url: Optional[str] = None
-    role: str
-    status: str
+    role: Literal["admin", "manager", "agent", "partner", "client"]
+    status: Literal["active", "pending", "suspended", "rejected"]
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
@@ -47,6 +47,8 @@ class PartnerProfileOut(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     services_provided: Optional[List[str]] = None
+    availability: Optional[str] = None
+    hours_per_week_available: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -76,12 +78,60 @@ class AgentProfileOut(BaseModel):
     access_to_internet: Optional[bool] = None
     internet_speed: Optional[str] = None
     description_of_self: Optional[str] = None
+    availability: Optional[str] = None
+    hours_per_week_available: Optional[str] = None
     total_bookings: int = 0
     total_refunds: int = 0
     total_disputes: int = 0
     avg_rating: float = 0.0
     hours_worked: float = 0.0
     quality_score: float = 0.0
+
+    model_config = {"from_attributes": True}
+
+
+class AgentSelfUpdate(BaseModel):
+    phone: Optional[str] = None
+    availability: Optional[str] = None
+    hours_per_week_available: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+
+
+class PartnerSelfUpdate(BaseModel):
+    phone: Optional[str] = None
+    availability: Optional[str] = None
+    hours_per_week_available: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+
+
+class AgentSelfOut(BaseModel):
+    """Combined User + AgentProfile returned from /users/agent/me."""
+    id: UUID
+    email: EmailStr
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[Gender] = None
+    profile_pic_url: Optional[str] = None
+    role: str
+    status: str
+    created_at: Optional[datetime] = None
+    profile: Optional[AgentProfileOut] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PartnerSelfOut(BaseModel):
+    """Combined User + PartnerProfile returned from /users/partners/me."""
+    id: UUID
+    email: EmailStr
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    gender: Optional[Gender] = None
+    profile_pic_url: Optional[str] = None
+    role: str
+    status: str
+    created_at: Optional[datetime] = None
+    profile: Optional[PartnerProfileOut] = None
 
     model_config = {"from_attributes": True}
 
@@ -164,6 +214,7 @@ class ListingCreate(BaseModel):
     pricingType: str
     currency: str
     attributes: Optional[dict] = {}
+    images: Optional[List[str]] = []
 
 
 class ListingOut(BaseModel):
@@ -179,6 +230,7 @@ class ListingOut(BaseModel):
     pricing_type: Optional[str] = None
     currency: Optional[str] = None
     attributes: Optional[dict] = {}
-    status: str
+    images: Optional[List[str]] = []
+    status: Literal["pending", "approved", "rejected"]
 
     model_config = {"from_attributes": True}

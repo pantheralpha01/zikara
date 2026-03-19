@@ -38,6 +38,7 @@ def create_listing(
         pricing_type=body.pricingType,
         currency=body.currency,
         attributes=body.attributes or {},
+        images=body.images or [],
         status="pending",
     )
     db.add(listing)

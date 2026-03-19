@@ -1,8 +1,20 @@
 from datetime import datetime
-from typing import Optional
+from typing import Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
+
+
+class BookingTrendPoint(BaseModel):
+    month: int
+    year: int
+    count: int
+
+
+class AgentWeeklyHoursOut(BaseModel):
+    agent_id: UUID
+    full_name: Optional[str] = None
+    hours_this_week: float = 0
 
 
 class PlatformStatsOut(BaseModel):
@@ -25,6 +37,9 @@ class PlatformStatsOut(BaseModel):
     gross_booking_value: float = 0
     total_amount_paid: float = 0
     refunds_issued: float = 0
+    total_payouts: float = 0        # sum of all 'payout' wallet transactions
+    platform_profit: float = 0      # gross - payouts - refunds
+    taxes_collected: float = 0      # placeholder: populate when tax model is added
 
     # Escrow
     escrow_balance: float = 0
@@ -50,14 +65,17 @@ class AgentStatsOut(BaseModel):
     cancelled_bookings: int = 0
     total_refunds: int = 0
     total_disputes: int = 0
+    active_disputes: int = 0        # currently open/under_review (not filtered by month)
     review_count: int = 0
     average_rating: float = 0
     five_star_rate: float = 0
     hours_worked: float = 0
+    revenue_generated: float = 0    # sum of completed booking amounts in period
     refund_rate: float = 0
     dispute_rate: float = 0
     booking_efficiency: float = 0
     quality_score: float = 0
+    booking_trends: List[BookingTrendPoint] = []  # last 6 months relative to queried month
 
 
 class PartnerStatsOut(BaseModel):

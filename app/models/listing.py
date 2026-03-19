@@ -22,6 +22,7 @@ class Listing(Base):
     pricing_type = Column(String(50), nullable=True)
     currency = Column(String(10), nullable=True)
     attributes = Column(JSON, default=dict, nullable=False)
+    images = Column(JSON, default=list, nullable=True)
     status = Column(
         Enum("pending", "approved", "rejected", name="listing_status"),
         default="pending",

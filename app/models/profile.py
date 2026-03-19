@@ -64,6 +64,10 @@ class AgentProfile(Base):
     # Personal Description
     description_of_self = Column(Text, nullable=True)
 
+    # Availability
+    availability = Column(String(50), nullable=True)  # e.g. "full-time", "part-time"
+    hours_per_week_available = Column(String(50), nullable=True)
+
     # Metrics Tracking
     total_bookings = Column(Integer, default=0, nullable=False)
     total_refunds = Column(Integer, default=0, nullable=False)
@@ -88,6 +92,8 @@ class PartnerProfile(Base):
     website = Column(String(500), nullable=True)
     description = Column(String(2000), nullable=True)
     services_provided = Column(ARRAY(String), default=list, nullable=True)
+    availability = Column(String(50), nullable=True)
+    hours_per_week_available = Column(String(50), nullable=True)
 
     # wallet relationship
     wallet = relationship("Wallet", back_populates="partner", uselist=False)

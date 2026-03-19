@@ -1,5 +1,5 @@
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -15,7 +15,13 @@ from app.models.refund_dispute import Dispute, Refund
 from app.models.review import Review
 from app.models.user import User
 from app.models.worklog import AgentWorkLog
-from app.schemas.stats import AgentStatsOut, PartnerStatsOut, PlatformStatsOut, WorkLogOut
+from app.schemas.stats import (
+    AgentStatsOut,
+    AgentWeeklyHoursOut,
+    PartnerStatsOut,
+    PlatformStatsOut,
+    WorkLogOut,
+)
 from app.services.snapshot import _compute_agent_stats, _compute_partner_stats, take_daily_snapshot
 
 router = APIRouter(prefix="/admin", tags=["Admin Stats"])
@@ -80,6 +86,13 @@ def platform_stats(
         db.query(func.sum(Refund.amount)).filter(Refund.status == "processed").scalar() or 0
     )
 
+    total_payouts = float(
+        db.query(func.sum(WalletTransaction.amount))
+        .filter(WalletTransaction.type == "payout")
+        .scalar() or 0
+    )
+    platform_profit = max(0.0, gross - total_payouts - refunds_total)
+
     disputes_open = (
         db.query(func.count(Dispute.id))
         .filter(Dispute.status.in_(["open", "under_review"]))
@@ -116,6 +129,9 @@ def platform_stats(
         gross_booking_value=gross,
         total_amount_paid=total_paid,
         refunds_issued=refunds_total,
+        total_payouts=total_payouts,
+        platform_profit=platform_profit,
+        taxes_collected=0.0,
         escrow_balance=float(wallet_row[0] or 0),
         available_balance=float(wallet_row[1] or 0),
         pending_balance=float(wallet_row[2] or 0),
@@ -275,3 +291,102 @@ def trigger_snapshot(
 
     take_daily_snapshot(SessionLocal(), target_date)
     return {"message": f"Snapshot completed for {target_date or 'yesterday'}"}
+
+
+# ── Clock-in / Clock-out ──────────────────────────────────────────────────────
+
+
+@router.post(
+    "/worklogs/clockin",
+    response_model=WorkLogOut,
+    status_code=201,
+    summary="Agent clock-in",
+    description="Starts a new work log entry for the calling agent. Fails if there is already an open (un-closed) entry.",
+)
+def agent_clockin(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("agent")),
+):
+    open_log = (
+        db.query(AgentWorkLog)
+        .filter(AgentWorkLog.agent_id == current_user.id, AgentWorkLog.clock_out == None)
+        .first()
+    )
+    if open_log:
+        raise HTTPException(status_code=400, detail="You already have an open shift. Clock out first.")
+
+    log = AgentWorkLog(
+        agent_id=current_user.id,
+        clock_in=datetime.now(timezone.utc),
+    )
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    return WorkLogOut.model_validate(log)
+
+
+@router.post(
+    "/worklogs/clockout",
+    response_model=WorkLogOut,
+    status_code=200,
+    summary="Agent clock-out",
+    description="Closes the calling agent's currently open work log entry.",
+)
+def agent_clockout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("agent")),
+):
+    log = (
+        db.query(AgentWorkLog)
+        .filter(AgentWorkLog.agent_id == current_user.id, AgentWorkLog.clock_out == None)
+        .first()
+    )
+    if not log:
+        raise HTTPException(status_code=404, detail="No open shift found. Clock in first.")
+
+    now = datetime.now(timezone.utc)
+    log.clock_out = now
+    log.hours = (now - log.clock_in).total_seconds() / 3600
+    db.commit()
+    db.refresh(log)
+    return WorkLogOut.model_validate(log)
+
+
+# ── Weekly agent hours listing ────────────────────────────────────────────────
+
+
+@router.get(
+    "/stats/agents/hours-weekly",
+    response_model=List[AgentWeeklyHoursOut],
+    summary="Agent hours worked this week",
+    description=(
+        "Returns a list of all agents with total hours worked in the current ISO week "
+        "(Monday 00:00 UTC → now). Accessible to admin and manager."
+    ),
+)
+def agent_hours_weekly(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin", "manager")),
+):
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=now.weekday())
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    rows = (
+        db.query(AgentWorkLog.agent_id, func.sum(AgentWorkLog.hours).label("total_hours"))
+        .filter(AgentWorkLog.clock_in >= week_start)
+        .group_by(AgentWorkLog.agent_id)
+        .all()
+    )
+
+    result = []
+    for agent_id, hours in rows:
+        user = db.query(User).filter(User.id == agent_id).first()
+        result.append(
+            AgentWeeklyHoursOut(
+                agent_id=agent_id,
+                full_name=user.full_name if user else None,
+                hours_this_week=float(hours or 0),
+            )
+        )
+    return result

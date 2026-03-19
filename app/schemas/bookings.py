@@ -1,7 +1,7 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class BookingPartner(BaseModel):
@@ -13,22 +13,35 @@ class BookingCreate(BaseModel):
     clientId: UUID
     agentId: UUID
     contractId: Optional[UUID] = None
-    paymentId: Optional[UUID] = None
     currency: str
     partners: List[BookingPartner] = []
     totalAmount: float
-    paymentType: str
+    paymentType: Literal["full", "partial"]
     costAtBooking: float = 0
     costPostEvent: float = 0
     dueDate: Optional[datetime] = None
     serviceStartAt: Optional[datetime] = None
     serviceEndAt: Optional[datetime] = None
-    status: str = "confirmed"
+
+    @model_validator(mode="after")
+    def validate_partial_payment(self):
+        if self.paymentType == "partial":
+            expected = round(self.costAtBooking + self.costPostEvent, 2)
+            if abs(self.totalAmount - expected) > 0.01:
+                raise ValueError(
+                    f"For partial payment, totalAmount ({self.totalAmount}) must equal "
+                    f"costAtBooking ({self.costAtBooking}) + costPostEvent ({self.costPostEvent})"
+                )
+        return self
 
 
 class BookingUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
+
+
+class BookingReassign(BaseModel):
+    agentId: UUID
 
 
 class BookingOut(BaseModel):
@@ -38,10 +51,10 @@ class BookingOut(BaseModel):
     contract_id: Optional[UUID] = None
     currency: Optional[str] = None
     total_amount: Optional[float] = None
-    payment_type: Optional[str] = None
+    payment_type: Optional[Literal["full", "partial"]] = None
     amount_paid: float = 0
-    payment_status: str = "unpaid"
-    status: str
+    payment_status: Literal["unpaid", "partially_paid", "fully_paid"] = "unpaid"
+    status: Literal["confirmed", "completed", "cancelled", "pending"]
     service_start_at: Optional[datetime] = None
     service_end_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

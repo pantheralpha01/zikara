@@ -64,3 +64,14 @@ def require_role(*roles: str):
         return current_user
 
     return checker
+
+
+def require_admin_only():
+    """Strict admin-only guard — managers are NOT granted access even though they
+    inherit admin rights elsewhere. Use this for agent lifecycle operations."""
+    def checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        return current_user
+
+    return checker

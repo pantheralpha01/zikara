@@ -83,7 +83,6 @@ def owned_booking_id(client_http, client_user_id, agent_user_id, partner_profile
             "totalAmount": 500,
             "paymentType": "full",
             "costAtBooking": 500,
-            "status": "confirmed",
             "partners": [{"partnerId": partner_profile_id, "amount": 500}],
         },
     )
@@ -102,12 +101,10 @@ def completed_booking_id(client_http, agent_http, client_user_id, agent_user_id)
             "totalAmount": 300,
             "paymentType": "full",
             "costAtBooking": 300,
-            "status": "confirmed",
         },
     )
     assert create.status_code == 201, create.text
     booking_id = create.json()["id"]
-
     done = agent_http.post(f"/bookings/{booking_id}/complete")
     assert done.status_code == 200, done.text
     return booking_id
@@ -215,14 +212,19 @@ class TestAdminMatrix:
 
 class TestRoleGates:
     def test_clients_and_agents_lists_are_admin_only(self, client_http, agent_http, partner_http, manager_client):
+        # Clients and partners cannot list clients or agents
         assert client_http.get("/clients").status_code == 403
-        assert agent_http.get("/clients").status_code == 403
         assert partner_http.get("/clients").status_code == 403
-        assert manager_client.get("/clients").status_code == 200
-
         assert client_http.get("/agents").status_code == 403
-        assert agent_http.get("/agents").status_code == 403
         assert partner_http.get("/agents").status_code == 403
+
+        # Agents CAN list clients (per spec — they need to look up client info)
+        assert agent_http.get("/clients").status_code == 200
+        # Agents cannot list agents (admin/manager only)
+        assert agent_http.get("/agents").status_code == 403
+
+        # Manager can list both
+        assert manager_client.get("/clients").status_code == 200
         assert manager_client.get("/agents").status_code == 200
 
     def test_partner_listing_create_requires_own_profile(self, partner_http, catalog_ids, partner_profile_id):

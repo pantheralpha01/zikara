@@ -6,8 +6,17 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, require_role
 from app.core.security import hash_password
 from app.db.session import get_db
+from app.models.profile import AgentProfile, PartnerProfile
 from app.models.user import User
-from app.schemas.common import ManagerCreateRequest, UserOut, UserUpdateRequest
+from app.schemas.common import (
+    AgentSelfOut,
+    AgentSelfUpdate,
+    ManagerCreateRequest,
+    PartnerSelfOut,
+    PartnerSelfUpdate,
+    UserOut,
+    UserUpdateRequest,
+)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -39,6 +48,128 @@ def delete_me(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     db.commit()
     return {"message": "Account deleted"}
 
+
+# ── Agent self endpoints ──────────────────────────────────────────────────────
+
+@router.get("/agent/me", response_model=AgentSelfOut, summary="Get own agent profile")
+def get_agent_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("agent"))):
+    profile = db.query(AgentProfile).filter(AgentProfile.user_id == current_user.id).first()
+    from app.schemas.common import AgentProfileOut
+    return AgentSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=AgentProfileOut.model_validate(profile) if profile else None,
+    )
+
+
+@router.patch(
+    "/agent/me",
+    response_model=AgentSelfOut,
+    summary="Update own agent profile (restricted fields)",
+    description="Agents may only update: phone, availability, hoursPerWeekAvailable, profilePicture.",
+)
+def update_agent_me(
+    body: AgentSelfUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("agent")),
+):
+    if body.phone is not None:
+        current_user.phone = body.phone
+    if body.profile_pic_url is not None:
+        current_user.profile_pic_url = body.profile_pic_url
+
+    profile = db.query(AgentProfile).filter(AgentProfile.user_id == current_user.id).first()
+    if profile:
+        if body.availability is not None:
+            profile.availability = body.availability
+        if body.hours_per_week_available is not None:
+            profile.hours_per_week_available = body.hours_per_week_available
+
+    db.commit()
+    db.refresh(current_user)
+    from app.schemas.common import AgentProfileOut
+    return AgentSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=AgentProfileOut.model_validate(profile) if profile else None,
+    )
+
+
+# ── Partner self endpoints ────────────────────────────────────────────────────
+
+@router.get("/partners/me", response_model=PartnerSelfOut, summary="Get own partner profile")
+def get_partner_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("partner"))):
+    profile = db.query(PartnerProfile).filter(PartnerProfile.user_id == current_user.id).first()
+    from app.schemas.common import PartnerProfileOut
+    return PartnerSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=PartnerProfileOut.model_validate(profile) if profile else None,
+    )
+
+
+@router.patch(
+    "/partners/me",
+    response_model=PartnerSelfOut,
+    summary="Update own partner profile (restricted fields)",
+    description="Partners may only update: phone, availability, hoursPerWeekAvailable, profilePicture.",
+)
+def update_partner_me(
+    body: PartnerSelfUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("partner")),
+):
+    if body.phone is not None:
+        current_user.phone = body.phone
+    if body.profile_pic_url is not None:
+        current_user.profile_pic_url = body.profile_pic_url
+
+    profile = db.query(PartnerProfile).filter(PartnerProfile.user_id == current_user.id).first()
+    if profile:
+        if body.availability is not None:
+            profile.availability = body.availability
+        if body.hours_per_week_available is not None:
+            profile.hours_per_week_available = body.hours_per_week_available
+
+    db.commit()
+    db.refresh(current_user)
+    from app.schemas.common import PartnerProfileOut
+    return PartnerSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=PartnerProfileOut.model_validate(profile) if profile else None,
+    )
+
+
+# ── Manager management ────────────────────────────────────────────────────────
 
 @router.post("/managers", response_model=UserOut, status_code=201)
 def create_manager(body: ManagerCreateRequest, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):

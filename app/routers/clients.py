@@ -13,13 +13,13 @@ router = APIRouter(prefix="/clients", tags=["Clients"])
 
 
 @router.get("", status_code=200)
-def list_clients(db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def list_clients(db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager", "agent"))):
     clients = db.query(User).filter(User.role == "client", User.is_deleted == False).all()
     return [UserOut.model_validate(c) for c in clients]
 
 
 @router.get("/{id}", status_code=200)
-def get_client(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def get_client(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager", "agent"))):
     client = db.query(User).filter(User.id == id, User.role == "client", User.is_deleted == False).first()
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")

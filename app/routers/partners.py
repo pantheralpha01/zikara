@@ -28,10 +28,13 @@ def list_partners(
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin")),
+    current_user: User = Depends(require_role("admin", "manager", "agent")),
 ):
     q = db.query(PartnerProfile).join(User, PartnerProfile.user_id == User.id)
-    if status:
+    # Agents may only see approved (active) partners
+    if current_user.role == "agent":
+        q = q.filter(User.status == "active")
+    elif status:
         q = q.filter(User.status == status)
     if search:
         q = q.filter(
@@ -47,7 +50,7 @@ def list_partners(
 def get_partner(
     id: UUID,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("admin", "agent")),
+    current_user: User = Depends(require_role("admin", "manager", "agent")),
 ):
     return PartnerProfileOut.model_validate(_get_partner_or_404(id, db))
 
@@ -57,7 +60,7 @@ def update_partner(
     id: UUID,
     body: PartnerUpdateRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role("admin", "agent")),
+    _: User = Depends(require_role("admin")),
 ):
     partner = _get_partner_or_404(id, db)
     for field, value in body.model_dump(exclude_none=True).items():
@@ -87,11 +90,19 @@ def reject_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(re
 
 
 @router.post("/{id}/suspend", status_code=200)
-def suspend_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
+def suspend_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
     partner = _get_partner_or_404(id, db)
     partner.user.status = "suspended"
     db.commit()
     return {"message": "Partner suspended"}
+
+
+@router.post("/{id}/reactivate", status_code=200)
+def reactivate_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
+    partner = _get_partner_or_404(id, db)
+    partner.user.status = "active"
+    db.commit()
+    return {"message": "Partner reactivated"}
 
 
 @router.get("/{id}/wallet", response_model=WalletOut)

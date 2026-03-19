@@ -260,6 +260,48 @@ def _compute_agent_stats(db: Session, agent_id, month: int, year: int) -> dict:
         or 0
     )
 
+    # Revenue from completed bookings in this period
+    revenue = float(
+        db.query(func.sum(Booking.total_amount))
+        .filter(
+            Booking.agent_id == agent_id,
+            Booking.status == "completed",
+            Booking.created_at >= start,
+            Booking.created_at < end,
+        )
+        .scalar()
+        or 0
+    )
+
+    # Active disputes (currently open/under_review — not filtered by month)
+    active_disputes = (
+        db.query(func.count(Dispute.id))
+        .join(Booking, Dispute.booking_id == Booking.id)
+        .filter(
+            Booking.agent_id == agent_id,
+            Dispute.status.in_(["open", "under_review"]),
+        )
+        .scalar()
+        or 0
+    )
+
+    # Booking trends: last 6 months relative to the requested month/year
+    trends = []
+    for i in range(5, -1, -1):
+        m = month - i
+        y = year
+        while m <= 0:
+            m += 12
+            y -= 1
+        t_start, t_end = _month_window(y, m)
+        count = (
+            db.query(func.count(Booking.id))
+            .filter(Booking.agent_id == agent_id, Booking.created_at >= t_start, Booking.created_at < t_end)
+            .scalar()
+            or 0
+        )
+        trends.append({"month": m, "year": y, "count": count})
+
     five_star_rate = (five_star / review_count * 100) if review_count > 0 else 0.0
     refund_rate = (refunds / total * 100) if total > 0 else 0.0
     dispute_rate = (disputes / total * 100) if total > 0 else 0.0
@@ -281,14 +323,17 @@ def _compute_agent_stats(db: Session, agent_id, month: int, year: int) -> dict:
         cancelled_bookings=cancelled,
         total_refunds=refunds,
         total_disputes=disputes,
+        active_disputes=active_disputes,
         review_count=review_count,
         average_rating=avg_rating,
         five_star_rate=five_star_rate,
         hours_worked=hours,
+        revenue_generated=revenue,
         refund_rate=refund_rate,
         dispute_rate=dispute_rate,
         booking_efficiency=booking_efficiency,
         quality_score=quality_score,
+        booking_trends=trends,
     )
 
 

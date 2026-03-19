@@ -117,9 +117,12 @@ def test_partner_cannot_access_foreign_wallet(partner_http):
 
 
 def test_non_admin_cannot_manage_agents_clients(client_http, agent_http, partner_http):
-    for c in (client_http, agent_http, partner_http):
+    # Clients and partners cannot list agents or clients
+    for c in (client_http, partner_http):
         assert c.get("/agents").status_code == 403
         assert c.get("/clients").status_code == 403
+    # Agents cannot list agents (admin/manager only) but CAN list clients (per spec)
+    assert agent_http.get("/agents").status_code == 403
 
 
 def test_non_admin_cannot_approve_listing(agent_http, partner_http, client_http, seeded_resources):

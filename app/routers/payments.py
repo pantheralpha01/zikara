@@ -112,6 +112,9 @@ def confirm_payment(
     total = float(booking.total_amount or 0)
     if total > 0 and new_amount_paid >= total:
         booking.payment_status = "fully_paid"
+        # Auto-confirm the booking once fully paid
+        if booking.status == "pending":
+            booking.status = "confirmed"
     elif new_amount_paid > 0:
         booking.payment_status = "partially_paid"
 
