@@ -11,6 +11,7 @@ from app.routers import (
     users,
     partners,
     agents,
+    managers,
     clients,
     categories,
     services,
@@ -58,6 +59,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(partners.router)
 app.include_router(agents.router)
+app.include_router(managers.router)
 app.include_router(clients.router)
 app.include_router(categories.router)
 app.include_router(services.router)

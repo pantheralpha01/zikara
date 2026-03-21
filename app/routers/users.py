@@ -16,6 +16,7 @@ from app.schemas.common import (
     PartnerSelfUpdate,
     UserOut,
     UserUpdateRequest,
+    AgentProfileOut,
 )
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -47,6 +48,25 @@ def delete_me(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     current_user.refresh_token = None
     db.commit()
     return {"message": "Account deleted"}
+
+
+# ── Manager self endpoints ────────────────────────────────────────────────────
+
+@router.get("/manager/me", response_model=AgentSelfOut, summary="Get own manager profile")
+def get_manager_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("manager"))):
+    profile = db.query(AgentProfile).filter(AgentProfile.user_id == current_user.id).first()
+    return AgentSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=AgentProfileOut.model_validate(profile) if profile else None,
+    )
 
 
 # ── Agent self endpoints ──────────────────────────────────────────────────────
@@ -169,7 +189,7 @@ def update_partner_me(
     )
 
 
-# ── Manager management ────────────────────────────────────────────────────────
+# ── Manager management (admin-only create / deactivate) ──────────────────────
 
 @router.post("/managers", response_model=UserOut, status_code=201)
 def create_manager(body: ManagerCreateRequest, db: Session = Depends(get_db), _: User = Depends(require_role("admin"))):
@@ -187,6 +207,25 @@ def create_manager(body: ManagerCreateRequest, db: Session = Depends(get_db), _:
         status="active",
     )
     db.add(manager)
+    db.flush()
+    db.add(AgentProfile(
+        user_id=manager.id,
+        id_number=body.idNumber,
+        id_type=body.idType,
+        age=body.age,
+        town=body.town,
+        city=body.city,
+        country=body.country,
+        education_level=body.educationLevel,
+        english_level=body.englishLevel,
+        computer_experience=body.computerExperience,
+        have_a_computer=body.haveAComputer if body.haveAComputer is not None else False,
+        access_to_internet=body.accessToInternet if body.accessToInternet is not None else False,
+        internet_speed=body.internetSpeed,
+        description_of_self=body.descriptionOfSelf,
+        availability=body.availability,
+        hours_per_week_available=body.hoursPerWeekAvailable,
+    ))
     db.commit()
     db.refresh(manager)
     return manager
@@ -197,8 +236,33 @@ def deactivate_manager(id: UUID, db: Session = Depends(get_db), _: User = Depend
     manager = db.query(User).filter(User.id == id, User.role == "manager", User.is_deleted == False).first()
     if not manager:
         raise HTTPException(status_code=404, detail="Manager not found")
-
     manager.status = "suspended"
     manager.refresh_token = None
     db.commit()
     return {"message": "Manager deactivated"}
+
+
+# ── Self-deactivation endpoints ───────────────────────────────────────────────
+
+@router.post("/manager/me/deactivate", status_code=200, summary="Manager self-deactivation")
+def deactivate_manager_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("manager"))):
+    current_user.status = "suspended"
+    current_user.refresh_token = None
+    db.commit()
+    return {"message": "Account deactivated"}
+
+
+@router.post("/agent/me/deactivate", status_code=200, summary="Agent self-deactivation")
+def deactivate_agent_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("agent"))):
+    current_user.status = "suspended"
+    current_user.refresh_token = None
+    db.commit()
+    return {"message": "Account deactivated"}
+
+
+@router.post("/partners/me/deactivate", status_code=200, summary="Partner self-deactivation")
+def deactivate_partner_me(db: Session = Depends(get_db), current_user: User = Depends(require_role("partner"))):
+    current_user.status = "suspended"
+    current_user.refresh_token = None
+    db.commit()
+    return {"message": "Account deactivated"}

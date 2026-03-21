@@ -2,7 +2,7 @@ from typing import Any, List, Literal, Optional
 from uuid import UUID
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 
 from app.models.profile import ComputerExperience, EducationLevel, EnglishLevel, IdType
 from app.models.user import Gender
@@ -36,6 +36,25 @@ class ManagerCreateRequest(BaseModel):
     phone: str
     gender: Optional[Gender] = None
     profilePicUrl: Optional[str] = None
+    # Identification (optional for direct hire)
+    idNumber: Optional[str] = None
+    idType: Optional[IdType] = None
+    # Location
+    age: Optional[int] = None
+    town: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    # Qualifications
+    educationLevel: Optional[EducationLevel] = None
+    englishLevel: Optional[EnglishLevel] = None
+    computerExperience: Optional[ComputerExperience] = None
+    haveAComputer: Optional[bool] = None
+    accessToInternet: Optional[bool] = None
+    internetSpeed: Optional[str] = None
+    descriptionOfSelf: Optional[str] = None
+    # Availability
+    availability: Optional[str] = None
+    hoursPerWeekAvailable: Optional[str] = None
 
 
 class PartnerProfileOut(BaseModel):
@@ -89,6 +108,13 @@ class PartnerUpdateRequest(BaseModel):
 class AgentProfileOut(BaseModel):
     id: UUID
     user_id: UUID
+    # User fields (from relationship)
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    profile_pic_url: Optional[str] = None
+    status: Optional[str] = None
+    # Profile fields
     id_number: Optional[str] = None
     id_type: Optional[IdType] = None
     age: Optional[int] = None
@@ -112,6 +138,18 @@ class AgentProfileOut(BaseModel):
     quality_score: float = 0.0
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _populate_user_fields(cls, value: Any, handler: Any) -> "AgentProfileOut":
+        instance = handler(value)
+        if hasattr(value, "user") and value.user is not None:
+            instance.full_name = value.user.full_name
+            instance.email = value.user.email
+            instance.phone = value.user.phone
+            instance.profile_pic_url = value.user.profile_pic_url
+            instance.status = value.user.status
+        return instance
 
 
 class AgentSelfUpdate(BaseModel):
