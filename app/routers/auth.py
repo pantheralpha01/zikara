@@ -157,6 +157,8 @@ def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
         access_to_internet=body.accessToInternet if body.accessToInternet is not None else False,
         internet_speed=body.internetSpeed,
         description_of_self=body.descriptionOfSelf,
+        availability=body.availability,
+        hours_per_week_available=body.hoursPerWeekAvailable,
     ))
     db.commit()
     db.refresh(user)
@@ -186,10 +188,26 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
         contact_last_name=body.contactLastName,
         id_number=body.idNumber,
         id_type=body.idType,
+        age=body.age,
+        town=body.town,
+        city=body.city,
+        country=body.country,
         business_name=body.businessName,
+        business_address=body.businessAddress,
+        business_phone=body.businessPhone,
         website=body.website,
         description=body.description,
+        years_in_business=body.yearsInBusiness,
+        service_areas=body.serviceAreas,
+        languages_spoken=body.languagesSpoken,
         services_provided=body.servicesProvided,
+        english_level=body.englishLevel,
+        computer_experience=body.computerExperience,
+        have_a_computer=body.haveAComputer if body.haveAComputer is not None else False,
+        access_to_internet=body.accessToInternet if body.accessToInternet is not None else False,
+        internet_speed=body.internetSpeed,
+        availability=body.availability,
+        hours_per_week_available=body.hoursPerWeekAvailable,
     )
     db.add(profile)
     db.commit()

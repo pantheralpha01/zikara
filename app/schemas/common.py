@@ -43,10 +43,34 @@ class PartnerProfileOut(BaseModel):
     user_id: UUID
     contact_first_name: Optional[str] = None
     contact_last_name: Optional[str] = None
+    id_number: Optional[str] = None
+    id_type: Optional[IdType] = None
+
+    # Personal
+    age: Optional[int] = None
+    town: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+
+    # Business
     business_name: Optional[str] = None
+    business_address: Optional[str] = None
+    business_phone: Optional[str] = None
     website: Optional[str] = None
     description: Optional[str] = None
+    years_in_business: Optional[int] = None
+    service_areas: Optional[List[str]] = None
+    languages_spoken: Optional[List[str]] = None
     services_provided: Optional[List[str]] = None
+
+    # Qualifications
+    english_level: Optional[EnglishLevel] = None
+    computer_experience: Optional[ComputerExperience] = None
+    have_a_computer: Optional[bool] = None
+    access_to_internet: Optional[bool] = None
+    internet_speed: Optional[str] = None
+
+    # Availability
     availability: Optional[str] = None
     hours_per_week_available: Optional[str] = None
 

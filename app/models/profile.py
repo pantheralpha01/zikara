@@ -88,10 +88,32 @@ class PartnerProfile(Base):
     contact_last_name = Column(String(255), nullable=True)
     id_number = Column(String(100), nullable=True)
     id_type = Column(Enum(IdType, name="id_type_partner", native_enum=False), nullable=True)
+
+    # Personal Details
+    age = Column(Integer, nullable=True)
+    town = Column(String(100), nullable=True)
+    city = Column(String(100), nullable=True)
+    country = Column(String(100), nullable=True)
+
+    # Business Details
     business_name = Column(String(255), nullable=True)
+    business_address = Column(String(500), nullable=True)
+    business_phone = Column(String(100), nullable=True)
     website = Column(String(500), nullable=True)
     description = Column(String(2000), nullable=True)
+    years_in_business = Column(Integer, nullable=True)
+    service_areas = Column(ARRAY(String), default=list, nullable=True)
+    languages_spoken = Column(ARRAY(String), default=list, nullable=True)
     services_provided = Column(ARRAY(String), default=list, nullable=True)
+
+    # Qualifications & Experience
+    english_level = Column(Enum(EnglishLevel, name="english_level_partner_enum", native_enum=False), nullable=True)
+    computer_experience = Column(Enum(ComputerExperience, name="computer_exp_partner_enum", native_enum=False), nullable=True)
+    have_a_computer = Column(Boolean, default=False, nullable=True)
+    access_to_internet = Column(Boolean, default=False, nullable=True)
+    internet_speed = Column(String(100), nullable=True)
+
+    # Availability
     availability = Column(String(50), nullable=True)
     hours_per_week_available = Column(String(50), nullable=True)
 

@@ -35,22 +35,53 @@ class AgentApplyRequest(BaseModel):
     accessToInternet: Optional[bool] = None
     internetSpeed: Optional[str] = None
     descriptionOfSelf: Optional[str] = None
+    availability: Optional[str] = None
+    hoursPerWeekAvailable: Optional[str] = None
 
 
 class PartnerSignupRequest(BaseModel):
+    # Contact person details
     contactFirstName: str
     contactLastName: str
     email: EmailStr
     password: str
     phone: str
-    idNumber: str
-    idType: IdType
-    businessName: str
-    website: Optional[str] = None
-    description: Optional[str] = None
     gender: Optional[Gender] = None
     profilePicUrl: Optional[str] = None
+    age: Optional[int] = None
+
+    # Identification
+    idNumber: str
+    idType: IdType
+
+    # Location
+    town: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+
+    # Business details
+    businessName: str
+    businessAddress: Optional[str] = None
+    businessPhone: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    yearsInBusiness: Optional[int] = None
+    serviceAreas: Optional[List[str]] = None
+    languagesSpoken: Optional[List[str]] = None
+
+    # Services
     servicesProvided: Optional[List[str]] = None
+
+    # Qualifications & Experience
+    englishLevel: Optional[EnglishLevel] = None
+    computerExperience: Optional[ComputerExperience] = None
+    haveAComputer: Optional[bool] = None
+    accessToInternet: Optional[bool] = None
+    internetSpeed: Optional[str] = None
+
+    # Availability
+    availability: Optional[str] = None
+    hoursPerWeekAvailable: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
