@@ -25,6 +25,7 @@ from app.routers import (
     otp,
 )
 from app.routers import admin
+from app.routers import enquiries
 from app.services.snapshot import take_daily_snapshot
 
 
@@ -74,6 +75,7 @@ app.include_router(refunds_disputes.disputes_router)
 app.include_router(reviews.router)
 app.include_router(otp.router)
 app.include_router(admin.router)
+app.include_router(enquiries.router)
 
 
 @app.get("/", tags=["Health"])

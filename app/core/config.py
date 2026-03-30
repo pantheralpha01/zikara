@@ -17,9 +17,22 @@ class Settings(BaseSettings):
     MAIL_PORT: int = 587
     MAIL_STARTTLS: bool = True
     MAIL_SSL_TLS: bool = False
+    ADMIN_NOTIFICATION_EMAILS: list[str] = []
 
     FRONTEND_URL: str = "http://localhost:3000"
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60
+    REQUIRE_EMAIL_VERIFICATION: bool = False
+
+    # Chakra HQ integration — inbound (Chakra → Zikara)
+    CHAKRA_API_KEY: str = ""
+
+    # Chakra HQ integration — outbound (Zikara → Chakra)
+    CHAKRA_BASE_URL: str = ""
+    CHAKRA_CLIENT_ID: str = ""
+    CHAKRA_CLIENT_SECRET: str = ""
+    CHAKRA_ACCESS_TOKEN: str = ""
+    CHAKRA_REFRESH_TOKEN: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

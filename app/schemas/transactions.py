@@ -39,6 +39,7 @@ class QuoteOut(BaseModel):
     total_amount: Optional[float] = None
     currency: Optional[str] = None
     payment_type: Optional[str] = None
+    chakra_enquiry_id: Optional[str] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

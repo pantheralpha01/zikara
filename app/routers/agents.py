@@ -2,10 +2,11 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import get_current_user, require_admin_only, require_role
 from app.db.session import get_db
+from app.models.payment import Wallet
 from app.models.profile import AgentProfile
 from app.models.user import User
 from app.schemas.common import AgentProfileOut
@@ -29,7 +30,7 @@ def list_agents(
     db: Session = Depends(get_db),
     _: User = Depends(require_role("admin", "manager")),
 ):
-    q = db.query(AgentProfile).join(User, AgentProfile.user_id == User.id)
+    q = db.query(AgentProfile).join(User, AgentProfile.user_id == User.id).options(joinedload(AgentProfile.user))
     if status:
         q = q.filter(User.status == status)
     if search:
@@ -48,6 +49,8 @@ def get_agent(id: UUID, db: Session = Depends(get_db), _: User = Depends(get_cur
 def approve_agent(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_admin_only())):
     agent = _get_agent_or_404(id, db)
     agent.user.status = "active"
+    if not db.query(Wallet).filter(Wallet.agent_id == agent.id).first():
+        db.add(Wallet(agent_id=agent.id, escrow_balance=0, available_balance=0, pending_balance=0))
     db.commit()
     return {"message": "Agent approved"}
 

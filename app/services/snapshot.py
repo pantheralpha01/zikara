@@ -89,7 +89,7 @@ def _snapshot_platform(db: Session, target_date: date) -> None:
 
     refunds_total = float(
         db.query(func.sum(Refund.amount))
-        .filter(Refund.status == "processed", Refund.updated_at >= day_start, Refund.updated_at < day_end)
+        .filter(Refund.status == "completed", Refund.updated_at >= day_start, Refund.updated_at < day_end)
         .scalar()
         or 0
     )
@@ -279,7 +279,7 @@ def _compute_agent_stats(db: Session, agent_id, month: int, year: int) -> dict:
         .join(Booking, Dispute.booking_id == Booking.id)
         .filter(
             Booking.agent_id == agent_id,
-            Dispute.status.in_(["open", "under_review"]),
+            Dispute.status.in_(["pending", "under_review"]),
         )
         .scalar()
         or 0

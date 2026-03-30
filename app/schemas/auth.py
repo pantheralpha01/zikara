@@ -111,6 +111,10 @@ class ForgotPasswordEmailRequest(BaseModel):
     email: EmailStr
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
 class ResetPasswordByTokenRequest(BaseModel):
     token: str
     newPassword: str

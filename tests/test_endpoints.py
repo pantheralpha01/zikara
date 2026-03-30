@@ -281,6 +281,43 @@ class TestOwnershipFlows:
         assert partner_http.post(f"/bookings/{owned_booking_id}/complete").status_code == 403
         assert agent_http.post(f"/bookings/{owned_booking_id}/complete").status_code == 200
 
+    def test_booking_includes_guest_counts_and_special_notes(self, client_http, client_user_id, agent_user_id, partner_profile_id):
+        create = client_http.post(
+            "/bookings",
+            json={
+                "clientId": client_user_id,
+                "agentId": agent_user_id,
+                "currency": "USD",
+                "totalAmount": 1200,
+                "paymentType": "full",
+                "costAtBooking": 1200,
+                "partners": [{"partnerId": partner_profile_id, "amount": 1200}],
+                "numberOfAdults": 2,
+                "numberOfChildren": 1,
+                "numberOfInfants": 1,
+                "residency": "RESIDENT",
+                "pets": True,
+                "pickupLocation": "Airport",
+                "destinationLocation": "Safari Lodge",
+                "specialNotes": "Vegetarian meal plan",
+            },
+        )
+        assert create.status_code == 201, create.text
+        booking_id = create.json()["id"]
+
+        get = client_http.get(f"/bookings/{booking_id}")
+        assert get.status_code == 200, get.text
+        booking_data = get.json()
+        assert booking_data["number_of_adults"] == 2
+        assert booking_data["number_of_children"] == 1
+        assert booking_data["number_of_infants"] == 1
+        assert booking_data["total_guests"] == 4
+        assert booking_data["residency"] == "RESIDENT"
+        assert booking_data["pets"] is True
+        assert booking_data["pickup_location"] == "Airport"
+        assert booking_data["destination_location"] == "Safari Lodge"
+        assert booking_data["special_notes"] == "Vegetarian meal plan"
+
     def test_payments_scope(self, client_http, agent_http, partner_http, admin_client, owned_booking_id, payment_id):
         assert client_http.get(f"/payments/{payment_id}").status_code == 200
         assert agent_http.get(f"/payments/{payment_id}").status_code == 200
@@ -385,3 +422,73 @@ class TestContractAndReviewMatrix:
             json={"rating": 10, "comment": "Bad"},
         )
         assert bad.status_code == 400
+
+
+class TestWithdrawalRequestWorkflow:
+    def test_partner_large_withdrawal_creates_pending_request(self, db, partner_http, partner_profile_id):
+        from app.models.payment import Wallet
+
+        wallet = db.query(Wallet).filter(Wallet.partner_id == partner_profile_id).first()
+        if wallet is None:
+            wallet = Wallet(partner_id=partner_profile_id, escrow_balance=0, available_balance=1500, pending_balance=0)
+        else:
+            wallet.available_balance = 1500
+        db.add(wallet)
+        db.commit()
+
+        r = partner_http.post(f"/wallets/{partner_profile_id}/withdraw", json={"amount": 1200})
+        assert r.status_code == 200, r.text
+        assert r.json()["message"] == "Withdrawal request submitted for approval"
+        assert "requestId" in r.json()
+
+    def test_admin_can_approve_withdrawal_request(self, db, admin_client, partner_profile_id):
+        from app.models.payment import Wallet, WithdrawalRequest
+
+        request = db.query(WithdrawalRequest).order_by(WithdrawalRequest.created_at.desc()).first()
+        assert request is not None
+        assert request.status == "pending"
+
+        wallet = db.query(Wallet).filter(Wallet.id == request.wallet_id).first()
+        assert wallet is not None
+        starting_balance = float(wallet.available_balance)
+
+        approve = admin_client.post(f"/payments/withdrawal-requests/{request.id}/approve")
+        assert approve.status_code == 200, approve.text
+        assert approve.json()["message"] == "Withdrawal request approved and processed"
+
+        db.refresh(request)
+        db.refresh(wallet)
+        assert request.status == "approved"
+        assert float(wallet.available_balance) == starting_balance - float(request.amount)
+
+    def test_admin_can_reject_withdrawal_request(self, db, admin_client, partner_profile_id):
+        from app.models.payment import Wallet, WithdrawalRequest
+        from app.models.profile import PartnerProfile
+
+        wallet = db.query(Wallet).filter(Wallet.partner_id == partner_profile_id).first()
+        assert wallet is not None
+        wallet.available_balance = 2000
+        db.add(wallet)
+        db.commit()
+
+        partner_profile = db.query(PartnerProfile).filter(PartnerProfile.id == partner_profile_id).first()
+        assert partner_profile is not None
+
+        request = WithdrawalRequest(
+            wallet_id=wallet.id,
+            amount=1500,
+            requested_by=partner_profile.user_id,
+        )
+        db.add(request)
+        db.commit()
+        db.refresh(request)
+
+        reject = admin_client.post(
+            f"/payments/withdrawal-requests/{request.id}/reject",
+            json={"review_note": "Request denied for testing"},
+        )
+        assert reject.status_code == 200, reject.text
+        assert reject.json()["message"] == "Withdrawal request rejected"
+
+        db.refresh(request)
+        assert request.status == "rejected"

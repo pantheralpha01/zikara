@@ -130,6 +130,8 @@ class AgentProfileOut(BaseModel):
     description_of_self: Optional[str] = None
     availability: Optional[str] = None
     hours_per_week_available: Optional[str] = None
+    pay_per_hour: float = 0.0
+    working_schedule: Optional[str] = None
     total_bookings: int = 0
     total_refunds: int = 0
     total_disputes: int = 0
@@ -156,6 +158,7 @@ class AgentSelfUpdate(BaseModel):
     phone: Optional[str] = None
     availability: Optional[str] = None
     hours_per_week_available: Optional[str] = None
+    working_schedule: Optional[str] = None
     profile_pic_url: Optional[str] = None
 
 
@@ -202,6 +205,31 @@ class WalletOut(BaseModel):
     escrowBalance: float
     availableBalance: float
     pendingBalance: float
+
+
+class WalletTransactionOut(BaseModel):
+    id: UUID
+    wallet_id: UUID
+    type: Literal["escrow_in", "escrow_release", "payout", "refund_debit"]
+    amount: float
+    reference: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class WithdrawalRequestOut(BaseModel):
+    id: UUID
+    wallet_id: UUID
+    amount: float
+    status: Literal["pending", "approved", "rejected"]
+    requested_by: UUID
+    reviewed_by: Optional[UUID] = None
+    review_note: Optional[str] = None
+    created_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
 
 
 class CategoryAttributeSchema(BaseModel):

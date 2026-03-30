@@ -31,6 +31,8 @@ class User(Base):
         default="active",
         nullable=False,
     )
+    email_verified = Column(Boolean, default=False, nullable=False)
+    email_verification_sent_at = Column(DateTime(timezone=True), nullable=True)
     refresh_token = Column(Text, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

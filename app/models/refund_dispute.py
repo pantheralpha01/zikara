@@ -15,8 +15,9 @@ class Refund(Base):
     booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id"), nullable=False)
     amount = Column(Numeric(14, 2), nullable=False)
     reason = Column(Text, nullable=True)
+    reference_id = Column(String(500), nullable=True)
     status = Column(
-        Enum("pending", "approved", "rejected", "processed", name="refund_status"),
+        Enum("pending", "rejected", "completed", name="refund_status"),
         default="pending",
         nullable=False,
     )
@@ -38,10 +39,11 @@ class Dispute(Base):
     reason = Column(String(500), nullable=True)
     description = Column(Text, nullable=True)
     status = Column(
-        Enum("open", "under_review", "resolved", "closed", name="dispute_status"),
-        default="open",
+        Enum("pending", "under_review", "resolved", "closed", name="dispute_status"),
+        default="pending",
         nullable=False,
     )
+    reference_id = Column(String(500), nullable=True)
     assigned_to = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(

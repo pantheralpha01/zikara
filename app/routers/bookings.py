@@ -10,6 +10,8 @@ from app.models.booking import Booking, BookingPartner
 from app.models.refund_dispute import Refund
 from app.models.user import User
 from app.schemas.bookings import BookingCreate, BookingOut, BookingReassign, BookingUpdate
+from app.services.chakra import notify_enquiry_status
+from app.services.payment import release_booking_wallets
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -37,12 +39,21 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_u
         client_id=body.clientId,
         agent_id=body.agentId,
         contract_id=body.contractId,
+        chakra_enquiry_id=body.chakraEnquiryId,
         currency=body.currency,
         partners=[p.model_dump(mode='json') for p in body.partners],
         total_amount=body.totalAmount,
         payment_type=body.paymentType,
         cost_at_booking=body.costAtBooking,
         cost_post_event=body.costPostEvent,
+        number_of_adults=body.numberOfAdults,
+        number_of_children=body.numberOfChildren,
+        number_of_infants=body.numberOfInfants,
+        residency=body.residency,
+        pets=body.pets,
+        pickup_location=body.pickupLocation,
+        destination_location=body.destinationLocation,
+        special_notes=body.specialNotes,
         due_date=body.dueDate,
         service_start_at=body.serviceStartAt,
         service_end_at=body.serviceEndAt,
@@ -54,6 +65,15 @@ def create_booking(body: BookingCreate, db: Session = Depends(get_db), current_u
         db.add(BookingPartner(booking_id=booking.id, partner_id=p.partnerId, amount=p.amount))
     db.commit()
     db.refresh(booking)
+
+    # Notify Chakra that a booking was created from this enquiry
+    if booking.chakra_enquiry_id:
+        notify_enquiry_status(
+            booking.chakra_enquiry_id,
+            "booking_created",
+            {"booking_id": str(booking.id), "agent_id": str(booking.agent_id)},
+        )
+
     return BookingOut.model_validate(booking)
 
 
@@ -142,7 +162,9 @@ def update_booking(id: UUID, body: BookingUpdate, db: Session = Depends(get_db),
         raise HTTPException(status_code=403, detail="You are not allowed to update this booking")
 
     for field, value in body.model_dump(exclude_none=True).items():
-        if hasattr(booking, field):
+        if field == "notes":
+            booking.special_notes = value
+        elif hasattr(booking, field):
             setattr(booking, field, value)
     db.commit()
     db.refresh(booking)
@@ -218,6 +240,11 @@ def cancel_booking(
 
     db.commit()
     db.refresh(booking)
+
+    # Notify Chakra of the cancellation
+    if booking.chakra_enquiry_id:
+        notify_enquiry_status(booking.chakra_enquiry_id, "booking_cancelled", {"booking_id": str(booking.id)})
+
     return BookingOut.model_validate(booking)
 
 
@@ -254,5 +281,11 @@ def complete_booking(id: UUID, db: Session = Depends(get_db), current_user: User
         raise HTTPException(status_code=403, detail="You can only complete your assigned bookings")
 
     booking.status = "completed"
+    release_booking_wallets(db, booking, reference=f"booking_complete:{booking.id}")
     db.commit()
+
+    # Notify Chakra of completion
+    if booking.chakra_enquiry_id:
+        notify_enquiry_status(booking.chakra_enquiry_id, "booking_completed", {"booking_id": str(booking.id)})
+
     return {"message": "Booking marked complete"}

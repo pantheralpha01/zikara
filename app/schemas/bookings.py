@@ -13,12 +13,21 @@ class BookingCreate(BaseModel):
     clientId: UUID
     agentId: UUID
     contractId: Optional[UUID] = None
+    chakraEnquiryId: Optional[str] = None
     currency: str
     partners: List[BookingPartner] = []
     totalAmount: float
     paymentType: Literal["full", "partial"]
     costAtBooking: float = 0
     costPostEvent: float = 0
+    numberOfAdults: int = 0
+    numberOfChildren: int = 0
+    numberOfInfants: int = 0
+    residency: Optional[Literal["CITIZEN", "RESIDENT", "NON-RESIDENT"] ] = None
+    pets: bool = False
+    pickupLocation: Optional[str] = None
+    destinationLocation: Optional[str] = None
+    specialNotes: Optional[str] = None
     dueDate: Optional[datetime] = None
     serviceStartAt: Optional[datetime] = None
     serviceEndAt: Optional[datetime] = None
@@ -38,6 +47,14 @@ class BookingCreate(BaseModel):
 class BookingUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
+    number_of_adults: Optional[int] = None
+    number_of_children: Optional[int] = None
+    number_of_infants: Optional[int] = None
+    residency: Optional[Literal["CITIZEN", "RESIDENT", "NON-RESIDENT"] ] = None
+    pets: Optional[bool] = None
+    pickup_location: Optional[str] = None
+    destination_location: Optional[str] = None
+    special_notes: Optional[str] = None
 
 
 class BookingReassign(BaseModel):
@@ -49,11 +66,21 @@ class BookingOut(BaseModel):
     client_id: UUID
     agent_id: UUID
     contract_id: Optional[UUID] = None
+    chakra_enquiry_id: Optional[str] = None
     currency: Optional[str] = None
     total_amount: Optional[float] = None
     payment_type: Optional[Literal["full", "partial"]] = None
     amount_paid: float = 0
     payment_status: Literal["unpaid", "partially_paid", "fully_paid"] = "unpaid"
+    number_of_adults: int = 0
+    number_of_children: int = 0
+    number_of_infants: int = 0
+    total_guests: int = 0
+    residency: Optional[Literal["CITIZEN", "RESIDENT", "NON-RESIDENT"] ] = None
+    pets: bool = False
+    pickup_location: Optional[str] = None
+    destination_location: Optional[str] = None
+    special_notes: Optional[str] = None
     status: Literal["confirmed", "completed", "cancelled", "pending"]
     service_start_at: Optional[datetime] = None
     service_end_at: Optional[datetime] = None
@@ -93,17 +120,21 @@ class RefundCreate(BaseModel):
     bookingId: UUID
     amount: float
     reason: str
+    reference_id: Optional[str] = None
 
 
 class RefundUpdate(BaseModel):
     status: Optional[str] = None
+    reference_id: Optional[str] = None
 
 
 class RefundOut(BaseModel):
     id: UUID
     booking_id: UUID
+    client_id: UUID
     amount: float
     reason: Optional[str] = None
+    reference_id: Optional[str] = None
     status: str
     created_at: Optional[datetime] = None
 
@@ -114,18 +145,22 @@ class DisputeCreate(BaseModel):
     bookingId: UUID
     reason: str
     description: str
+    reference_id: Optional[str] = None
 
 
 class DisputeUpdate(BaseModel):
     status: Optional[str] = None
     assigned_to: Optional[UUID] = None
+    reference_id: Optional[str] = None
 
 
 class DisputeOut(BaseModel):
     id: UUID
     booking_id: UUID
+    client_id: UUID
     reason: Optional[str] = None
     description: Optional[str] = None
+    reference_id: Optional[str] = None
     status: str
     created_at: Optional[datetime] = None
 

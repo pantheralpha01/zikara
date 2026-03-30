@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, JSON, Numeric, String
+from sqlalchemy import Column, DateTime, Enum, ForeignKey, JSON, Integer, Numeric, String, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -16,12 +16,24 @@ class Booking(Base):
     agent_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     contract_id = Column(UUID(as_uuid=True), ForeignKey("client_contracts.id"), nullable=True)
     payment_id = Column(UUID(as_uuid=True), nullable=True)
+    chakra_enquiry_id = Column(String(255), nullable=True, index=True)
     currency = Column(String(10), nullable=True)
     partners = Column(JSON, default=list)
     total_amount = Column(Numeric(14, 2), nullable=True)
     payment_type = Column(String(50), nullable=True)
     cost_at_booking = Column(Numeric(14, 2), nullable=True)
     cost_post_event = Column(Numeric(14, 2), nullable=True)
+    number_of_adults = Column(Integer, default=0, nullable=False)
+    number_of_children = Column(Integer, default=0, nullable=False)
+    number_of_infants = Column(Integer, default=0, nullable=False)
+    residency = Column(
+        Enum("CITIZEN", "RESIDENT", "NON-RESIDENT", name="booking_residency"),
+        nullable=True,
+    )
+    pets = Column(Boolean, default=False, nullable=False)
+    pickup_location = Column(String(255), nullable=True)
+    destination_location = Column(String(255), nullable=True)
+    special_notes = Column(String(1000), nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True)
     service_start_at = Column(DateTime(timezone=True), nullable=True)
     service_end_at = Column(DateTime(timezone=True), nullable=True)
@@ -42,6 +54,10 @@ class Booking(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    @property
+    def total_guests(self) -> int:
+        return int((self.number_of_adults or 0) + (self.number_of_children or 0) + (self.number_of_infants or 0))
 
     client = relationship("User", foreign_keys=[client_id])
     agent = relationship("User", foreign_keys=[agent_id])

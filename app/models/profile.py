@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from sqlalchemy import Boolean, Column, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import relationship
 
@@ -76,7 +76,17 @@ class AgentProfile(Base):
     hours_worked = Column(Float, default=0.0, nullable=False)
     quality_score = Column(Float, default=0.0, nullable=False)
 
+    # Round-robin assignment state
+    availability_status = Column(String(20), nullable=False, default="offline")  # offline / available / busy
+    active_enquiry_count = Column(Integer, default=0, nullable=False)
+    max_concurrent_enquiries = Column(Integer, default=5, nullable=False)
+    last_assigned_at = Column(DateTime(timezone=True), nullable=True)
+
+    pay_per_hour = Column(Numeric(12, 2), default=0, nullable=False)
+    working_schedule = Column(String(500), nullable=True)
+
     user = relationship("User", back_populates="agent_profile")
+    wallet = relationship("Wallet", back_populates="agent", uselist=False)
 
 
 class PartnerProfile(Base):

@@ -39,6 +39,7 @@ def create_quote(body: QuoteCreate, db: Session = Depends(get_db), current_user:
         service_start_at=body.serviceStartAt,
         service_end_at=body.serviceEndAt,
         service_timezone=body.serviceTimezone,
+        chakra_enquiry_id=body.chakraEnquiryId,
     )
     db.add(quote)
     db.commit()

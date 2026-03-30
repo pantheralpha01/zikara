@@ -77,6 +77,8 @@ def update_partner(
 def approve_partner(id: UUID, db: Session = Depends(get_db), _: User = Depends(require_role("admin", "manager"))):
     partner = _get_partner_or_404(id, db)
     partner.user.status = "active"
+    if not db.query(Wallet).filter(Wallet.partner_id == partner.id).first():
+        db.add(Wallet(partner_id=partner.id, escrow_balance=0, available_balance=0, pending_balance=0))
     db.commit()
     return {"message": "Partner approved"}
 
@@ -109,9 +111,15 @@ def reactivate_partner(id: UUID, db: Session = Depends(get_db), _: User = Depend
 def get_partner_wallet(
     id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     partner = _get_partner_or_404(id, db)
+    if current_user.role not in {"admin", "manager"}:
+        if current_user.role != "partner":
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        if partner.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only view your own wallet")
+
     wallet = db.query(Wallet).filter(Wallet.partner_id == partner.id).first()
     if not wallet:
         return WalletOut(escrowBalance=0, availableBalance=0, pendingBalance=0)

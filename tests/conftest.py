@@ -8,18 +8,17 @@ All test data is cleaned up via a module-scoped teardown.
 
 import uuid
 import pytest
-import httpx
 from sqlalchemy import text
+from fastapi.testclient import TestClient
 
 # Import all models so SQLAlchemy can resolve all relationships (e.g. Wallet)
 import app.db.init_models  # noqa: F401
+from app.main import app
 from app.core.security import decode_token
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models.user import User
 from app.models.profile import AgentProfile, ClientProfile, PartnerProfile
-
-BASE_URL = "http://localhost:8000"
 
 # ── unique email helpers ──────────────────────────────────────────────────────
 
@@ -134,21 +133,21 @@ def partner_credentials():
 @pytest.fixture(scope="session")
 def http():
     """Plain HTTP client (no auth)."""
-    with httpx.Client(base_url=BASE_URL, timeout=60) as c:
+    with TestClient(app) as c:
         yield c
 
 
 @pytest.fixture(scope="session")
 def admin_client(admin_token):
     headers = {"Authorization": f"Bearer {admin_token}"}
-    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+    with TestClient(app, headers=headers) as c:
         yield c
 
 
 @pytest.fixture(scope="session")
 def manager_client(manager_token):
     headers = {"Authorization": f"Bearer {manager_token}"}
-    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+    with TestClient(app, headers=headers) as c:
         yield c
 
 
@@ -174,7 +173,7 @@ def client_token_data(http, client_credentials):
 @pytest.fixture(scope="session")
 def client_http(client_token_data):
     headers = {"Authorization": f"Bearer {client_token_data['accessToken']}"}
-    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+    with TestClient(app, headers=headers) as c:
         yield c
 
 
@@ -212,7 +211,7 @@ def agent_token_data(http, agent_credentials):
 @pytest.fixture(scope="session")
 def agent_http(agent_token_data):
     headers = {"Authorization": f"Bearer {agent_token_data['accessToken']}"}
-    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+    with TestClient(app, headers=headers) as c:
         yield c
 
 
@@ -250,7 +249,7 @@ def partner_token_data(http, partner_credentials):
 @pytest.fixture(scope="session")
 def partner_http(partner_token_data):
     headers = {"Authorization": f"Bearer {partner_token_data['accessToken']}"}
-    with httpx.Client(base_url=BASE_URL, headers=headers, timeout=60) as c:
+    with TestClient(app, headers=headers) as c:
         yield c
 
 

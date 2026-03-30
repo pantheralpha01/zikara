@@ -30,6 +30,7 @@ class Quote(Base):
     service_start_at = Column(DateTime(timezone=True), nullable=True)
     service_end_at = Column(DateTime(timezone=True), nullable=True)
     service_timezone = Column(String(100), nullable=True)
+    chakra_enquiry_id = Column(String(255), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     agent = relationship("User", foreign_keys=[agent_id])

@@ -9,7 +9,9 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     create_password_reset_token,
+    create_email_verification_token,
     decode_password_reset_token,
+    decode_email_verification_token,
     decode_token,
     hash_password,
     verify_password,
@@ -19,6 +21,7 @@ from app.db.session import get_db
 from app.models.profile import AgentProfile, ClientProfile, PartnerProfile
 from app.models.user import User
 from app.models.worklog import AgentWorkLog
+from app.services.assignment import set_agent_available, set_agent_offline
 from app.schemas.auth import (
     AccessTokenResponse,
     AgentApplyRequest,
@@ -29,15 +32,16 @@ from app.schemas.auth import (
     TokenResponse,
     OAuthTokenResponse,
     ForgotPasswordEmailRequest,
+    VerifyEmailRequest,
     ResetPasswordByTokenRequest,
 )
-from app.services.email import send_password_reset_email
+from app.services.email import send_password_reset_email, send_email_verification_email
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
 @router.post("/client/signup", status_code=status.HTTP_201_CREATED)
-def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
+async def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -50,12 +54,19 @@ def client_signup(body: ClientSignupRequest, db: Session = Depends(get_db)):
         profile_pic_url=body.profilePicUrl,
         role="client",
         status="active",
+        email_verified=False,
+        email_verification_sent_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.flush()
     db.add(ClientProfile(user_id=user.id))
     db.commit()
     db.refresh(user)
+
+    token = create_email_verification_token(str(user.id))
+    verification_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    await send_email_verification_email(user.email, verification_link)
+
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
 
 
@@ -66,12 +77,15 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.status == "suspended":
         raise HTTPException(status_code=403, detail="Account suspended")
+    if settings.REQUIRE_EMAIL_VERIFICATION and not user.email_verified:
+        raise HTTPException(status_code=403, detail="Email address is not verified")
 
     access = create_access_token(str(user.id), user.role)
     refresh = create_refresh_token(str(user.id), user.role)
     user.refresh_token = refresh
     if user.role == "agent":
         db.add(AgentWorkLog(agent_id=user.id, clock_in=datetime.now(timezone.utc)))
+        set_agent_available(user.id, db)
     db.commit()
     return TokenResponse(accessToken=access, refreshToken=refresh)
 
@@ -83,12 +97,15 @@ def oauth_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.status == "suspended":
         raise HTTPException(status_code=403, detail="Account suspended")
+    if settings.REQUIRE_EMAIL_VERIFICATION and not user.email_verified:
+        raise HTTPException(status_code=403, detail="Email address is not verified")
 
     access = create_access_token(str(user.id), user.role)
     refresh = create_refresh_token(str(user.id), user.role)
     user.refresh_token = refresh
     if user.role == "agent":
         db.add(AgentWorkLog(agent_id=user.id, clock_in=datetime.now(timezone.utc)))
+        set_agent_available(user.id, db)
     db.commit()
     return OAuthTokenResponse(access_token=access, token_type="bearer")
 
@@ -120,13 +137,14 @@ def logout(db: Session = Depends(get_db), current_user: User = Depends(get_curre
             now = datetime.now(timezone.utc)
             log.clock_out = now
             log.hours = (now - log.clock_in).total_seconds() / 3600
+        set_agent_offline(current_user.id, db)
     current_user.refresh_token = None
     db.commit()
     return {"message": "Logged out"}
 
 
 @router.post("/agent/apply", status_code=status.HTTP_201_CREATED)
-def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
+async def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -139,6 +157,8 @@ def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
         profile_pic_url=body.profilePicUrl,
         role="agent",
         status="pending",
+        email_verified=False,
+        email_verification_sent_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.flush()
@@ -162,11 +182,16 @@ def agent_apply(body: AgentApplyRequest, db: Session = Depends(get_db)):
     ))
     db.commit()
     db.refresh(user)
+
+    token = create_email_verification_token(str(user.id))
+    verification_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    await send_email_verification_email(user.email, verification_link)
+
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
 
 
 @router.post("/partner/signup", status_code=status.HTTP_201_CREATED)
-def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
+async def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -179,6 +204,8 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
         profile_pic_url=body.profilePicUrl,
         role="partner",
         status="pending",
+        email_verified=False,
+        email_verification_sent_at=datetime.now(timezone.utc),
     )
     db.add(user)
     db.flush()
@@ -212,6 +239,11 @@ def partner_signup(body: PartnerSignupRequest, db: Session = Depends(get_db)):
     db.add(profile)
     db.commit()
     db.refresh(user)
+
+    token = create_email_verification_token(str(user.id))
+    verification_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    await send_email_verification_email(user.email, verification_link)
+
     return {"id": user.id, "email": user.email, "role": user.role, "status": user.status}
 
 
@@ -226,6 +258,41 @@ async def forgot_password_email(body: ForgotPasswordEmailRequest, db: Session = 
         if not sent:
             raise HTTPException(status_code=502, detail="Failed to send reset email. Please try again.")
     return {"message": "If that email is registered, a password reset link has been sent."}
+
+
+@router.post("/verify-email", status_code=200)
+def verify_email(body: VerifyEmailRequest, db: Session = Depends(get_db)):
+    payload = decode_email_verification_token(body.token)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+
+    user = db.query(User).filter(User.id == payload["sub"], User.is_deleted == False).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    if user.email_verified:
+        return {"message": "Email already verified."}
+
+    user.email_verified = True
+    db.commit()
+    return {"message": "Email address verified successfully."}
+
+
+@router.post("/resend-verification", status_code=200)
+async def resend_verification_email(body: ForgotPasswordEmailRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == body.email, User.is_deleted == False).first()
+    if not user:
+        return {"message": "If that email is registered, a verification email has been sent."}
+    if user.email_verified:
+        return {"message": "Email is already verified."}
+
+    token = create_email_verification_token(str(user.id))
+    verification_link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    sent = await send_email_verification_email(user.email, verification_link)
+    if not sent:
+        raise HTTPException(status_code=502, detail="Failed to send verification email. Please try again.")
+    user.email_verification_sent_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "If that email is registered, a verification email has been sent."}
 
 
 @router.post("/reset-password-by-token", status_code=200)

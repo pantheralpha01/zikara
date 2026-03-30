@@ -83,7 +83,7 @@ def platform_stats(
     total_paid = float(db.query(func.sum(Booking.amount_paid)).scalar() or 0)
 
     refunds_total = float(
-        db.query(func.sum(Refund.amount)).filter(Refund.status == "processed").scalar() or 0
+        db.query(func.sum(Refund.amount)).filter(Refund.status == "completed").scalar() or 0
     )
 
     total_payouts = float(
@@ -95,7 +95,7 @@ def platform_stats(
 
     disputes_open = (
         db.query(func.count(Dispute.id))
-        .filter(Dispute.status.in_(["open", "under_review"]))
+        .filter(Dispute.status.in_(["pending", "under_review"]))
         .scalar()
         or 0
     )

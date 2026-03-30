@@ -69,6 +69,47 @@ def get_manager_me(db: Session = Depends(get_db), current_user: User = Depends(r
     )
 
 
+@router.patch(
+    "/manager/me",
+    response_model=AgentSelfOut,
+    summary="Update own manager profile (restricted fields)",
+    description="Managers may update the same self-service profile fields as agents: phone, availability, hoursPerWeekAvailable, profilePicture.",
+)
+def update_manager_me(
+    body: AgentSelfUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("manager")),
+):
+    if body.phone is not None:
+        current_user.phone = body.phone
+    if body.profile_pic_url is not None:
+        current_user.profile_pic_url = body.profile_pic_url
+
+    profile = db.query(AgentProfile).filter(AgentProfile.user_id == current_user.id).first()
+    if profile:
+        if body.availability is not None:
+            profile.availability = body.availability
+        if body.hours_per_week_available is not None:
+            profile.hours_per_week_available = body.hours_per_week_available
+        if body.working_schedule is not None:
+            profile.working_schedule = body.working_schedule
+
+    db.commit()
+    db.refresh(current_user)
+    return AgentSelfOut(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        phone=current_user.phone,
+        gender=current_user.gender,
+        profile_pic_url=current_user.profile_pic_url,
+        role=current_user.role,
+        status=current_user.status,
+        created_at=current_user.created_at,
+        profile=AgentProfileOut.model_validate(profile) if profile else None,
+    )
+
+
 # ── Agent self endpoints ──────────────────────────────────────────────────────
 
 @router.get("/agent/me", response_model=AgentSelfOut, summary="Get own agent profile")
@@ -111,6 +152,8 @@ def update_agent_me(
             profile.availability = body.availability
         if body.hours_per_week_available is not None:
             profile.hours_per_week_available = body.hours_per_week_available
+        if body.working_schedule is not None:
+            profile.working_schedule = body.working_schedule
 
     db.commit()
     db.refresh(current_user)
