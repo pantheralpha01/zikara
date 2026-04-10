@@ -22,3 +22,11 @@ from app.models.stats import (  # noqa: F401
     PartnerDailyStats,
 )
 from app.models.enquiry import Enquiry  # noqa: F401
+from app.models.community import (  # noqa: F401
+    CommunityTopic,
+    CommunityPost,
+    CommunityComment,
+    CommunityReaction,
+    CommunityPostFlag,
+    CommunitySubscription,
+)
